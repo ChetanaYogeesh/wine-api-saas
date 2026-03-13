@@ -1,11 +1,48 @@
-from fastapi import FastAPI, Query, HTTPException
+import os
+from dotenv import load_dotenv
+from fastapi import FastAPI, Query, HTTPException, Request, Depends
+from fastapi.security import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from typing import Optional
 import pandas as pd
 
 from app.data import get_data
 from app.models import Wine, WineListResponse, WineStats
 
+load_dotenv()
+
+API_KEY = os.getenv("API_KEY", "dev-api-key-change-me")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
 app = FastAPI(title="Wine API", version="0.1.0")
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+security_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(request: Request, api_key: str = Depends(security_header)):
+    if api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return api_key
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return {"detail": "Rate limit exceeded. Please try again later."}
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
@@ -19,7 +56,10 @@ def health_check():
 
 
 @app.get("/wines", response_model=WineListResponse)
-def list_wines(
+@limiter.limit("60/minute")
+async def list_wines(
+    request: Request,
+    api_key: str = Depends(verify_api_key),
     region: Optional[str] = None,
     variety: Optional[str] = None,
     min_rating: Optional[float] = None,
@@ -59,7 +99,8 @@ def list_wines(
 
 
 @app.get("/wines/stats", response_model=WineStats)
-def wine_stats():
+@limiter.limit("60/minute")
+async def wine_stats(request: Request, api_key: str = Depends(verify_api_key)):
     df = get_data()
     df_rated = df.dropna(subset=["rating"])
 
@@ -89,7 +130,10 @@ def wine_stats():
 
 
 @app.get("/wines/search", response_model=WineListResponse)
-def search_wines(
+@limiter.limit("60/minute")
+async def search_wines(
+    request: Request,
+    api_key: str = Depends(verify_api_key),
     q: str = Query(..., min_length=1),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -121,7 +165,10 @@ def search_wines(
 
 
 @app.get("/wines/top-rated", response_model=WineListResponse)
-def top_rated_wines(
+@limiter.limit("60/minute")
+async def top_rated_wines(
+    request: Request,
+    api_key: str = Depends(verify_api_key),
     limit: int = Query(10, ge=1, le=100),
     region: Optional[str] = None,
 ):
@@ -150,7 +197,10 @@ def top_rated_wines(
 
 
 @app.get("/wines/{wine_id}", response_model=Wine)
-def get_wine(wine_id: int):
+@limiter.limit("60/minute")
+async def get_wine(
+    request: Request, api_key: str = Depends(verify_api_key), wine_id: int = None
+):
     df = get_data()
     if wine_id not in df.index:
         raise HTTPException(status_code=404, detail="Wine not found")
@@ -166,15 +216,19 @@ def get_wine(wine_id: int):
 
 
 @app.get("/regions")
-def list_regions():
+@limiter.limit("60/minute")
+async def list_regions(request: Request, api_key: str = Depends(verify_api_key)):
     df = get_data()
     regions = df["region"].dropna().unique().tolist()
     return {"regions": sorted([r for r in regions if r])}
 
 
 @app.get("/regions/{region}/wines", response_model=WineListResponse)
-def get_wines_by_region(
-    region: str,
+@limiter.limit("60/minute")
+async def get_wines_by_region(
+    request: Request,
+    api_key: str = Depends(verify_api_key),
+    region: str = None,
     variety: Optional[str] = None,
     min_rating: Optional[float] = None,
     max_rating: Optional[float] = None,
@@ -212,7 +266,8 @@ def get_wines_by_region(
 
 
 @app.get("/varieties")
-def list_varieties():
+@limiter.limit("60/minute")
+async def list_varieties(request: Request, api_key: str = Depends(verify_api_key)):
     df = get_data()
     varieties = df["variety"].dropna().unique().tolist()
     return {"varieties": sorted([v for v in varieties if v])}
