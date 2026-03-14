@@ -18,7 +18,6 @@ env/
 .mypy_cache/
 *.log
 .DS_Store
-wine-ratings.csv
 test_data.csv
 tests/
 Dockerfile
