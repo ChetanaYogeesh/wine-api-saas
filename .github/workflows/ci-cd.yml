@@ -3,6 +3,7 @@ name: CI/CD
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -29,9 +30,12 @@ jobs:
           source venv/bin/activate
           pytest tests/ -v
 
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: read
+      packages: write
     
     steps:
       - uses: actions/checkout@v4
@@ -39,20 +43,22 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         
-      - name: Login to Docker Hub
+      - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/wine-api
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=branch
+            type=ref,event=tag
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
             
