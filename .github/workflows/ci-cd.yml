@@ -11,11 +11,12 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JANSCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
        
@@ -38,8 +39,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     
     steps:
       - uses: actions/checkout@v4
