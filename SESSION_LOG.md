@@ -118,6 +118,22 @@ Merged two `env` sections into one to fix validation error.
 
 ---
 
+## Documentation Consolidation
+
+Created consolidated documentation files:
+
+1. **README.md** - Quick start, features, API endpoints, tech stack
+2. **DEVELOPMENT.md** - Development guide, phases, testing, code quality
+
+Removed redundant files (merged into above):
+- ~~AGENT_FRAMEWORK.md~~ → merged into README.md
+- ~~PROJECT_SUMMARY.md~~ → merged into README.md
+- ~~WORKFLOW_DETAILS.md~~ → merged into DEVELOPMENT.md
+- ~~PRIORITY_ROADMAP.md~~ → merged into DEVELOPMENT.md
+- ~~DEPLOYMENT.md~~ → merged into README.md ( Deployment section)
+
+---
+
 ## Files Modified
 
 - `tests/conftest.py` - Complete rewrite for SQLite testing
