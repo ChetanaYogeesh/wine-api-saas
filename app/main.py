@@ -489,6 +489,12 @@ async def wine_stats(
     api_key: APIKey = Depends(verify_api_key),
     db: Session = Depends(get_db),
 ):
+    from app.cache import stats_cache
+
+    cached = stats_cache.get("stats")
+    if cached:
+        return WineStats(**cached)
+
     total = db.query(Wine).count()
 
     wines_with_rating = db.query(Wine).filter(Wine.rating.isnot(None)).all()
@@ -515,12 +521,16 @@ async def wine_stats(
         else:
             distribution["0-85"] += 1
 
-    return WineStats(
-        total_wines=total,
-        avg_rating=round(avg_rating, 2),
-        top_region=top_region,
-        rating_distribution=distribution,
-    )
+    stats = {
+        "total_wines": total,
+        "avg_rating": round(avg_rating, 2),
+        "top_region": top_region,
+        "rating_distribution": distribution,
+    }
+
+    stats_cache.set("stats", stats)
+
+    return WineStats(**stats)
 
 
 @app.get("/regions")
@@ -530,8 +540,17 @@ async def list_regions(
     api_key: APIKey = Depends(verify_api_key),
     db: Session = Depends(get_db),
 ):
+    from app.cache import regions_cache
+
+    cached = regions_cache.get("list")
+    if cached:
+        return cached
+
     regions = db.query(Wine.region).distinct().filter(Wine.region.isnot(None)).all()
-    return {"regions": sorted([r[0] for r in regions if r[0]])}
+    result = {"regions": sorted([r[0] for r in regions if r[0]])}
+
+    regions_cache.set("list", result)
+    return result
 
 
 @app.get("/regions/{region}/wines", response_model=WineListResponse)
@@ -584,8 +603,17 @@ async def list_varieties(
     api_key: APIKey = Depends(verify_api_key),
     db: Session = Depends(get_db),
 ):
+    from app.cache import varieties_cache
+
+    cached = varieties_cache.get("list")
+    if cached:
+        return cached
+
     varieties = db.query(Wine.variety).distinct().filter(Wine.variety.isnot(None)).all()
-    return {"varieties": sorted([v[0] for v in varieties if v[0]])}
+    result = {"varieties": sorted([v[0] for v in varieties if v[0]])}
+
+    varieties_cache.set("list", result)
+    return result
 
 
 @app.get("/usage", response_model=UsageStats)
@@ -662,4 +690,34 @@ def list_tiers():
                 "price": "$99/month",
             },
         ]
+    }
+
+
+@app.get("/v1/info")
+def get_api_info():
+    """Get API version information"""
+    return {
+        "name": "Wine API",
+        "version": "1.0.0",
+        "description": "Wine Data API",
+        "documentation": "/docs",
+        "tiers_endpoint": "/tiers",
+    }
+
+
+@app.get("/v1/health")
+def health_check_v1():
+    """Health check for v1"""
+    return {"status": "healthy", "version": "1.0.0"}
+
+
+@app.get("/version")
+def get_version():
+    """Get current API version"""
+    return {
+        "version": "1.0.0",
+        "release_date": "2026-03-16",
+        "changelog": [
+            "1.0.0 - Initial release with PostgreSQL, Redis caching, Celery tasks",
+        ],
     }

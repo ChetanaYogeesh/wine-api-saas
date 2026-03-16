@@ -1,0 +1,39 @@
+{
+  "name": "wine-api",
+  "description": "Wine Data API SaaS",
+  "repository": "https://github.com/ChetanaYogeesh/wine-api-saas",
+  "regions": ["us"],
+  "build": {
+    "builder": "heroku/buildpacks"
+  },
+  "config": {
+    "DATABASE_URL": {
+      "description": "PostgreSQL connection string"
+    },
+    "REDIS_URL": {
+      "description": "Redis connection string"
+    },
+    "SECRET_KEY": {
+      "description": "Secret key for JWT tokens",
+      "generator": "secret"
+    },
+    "API_KEY": {
+      "description": "Default API key"
+    },
+    "ALLOWED_ORIGINS": {
+      "description": "CORS allowed origins",
+      "value": "*"
+    }
+  },
+  "addons": [
+    "heroku-postgresql:hobby-dev",
+    "heroku-redis:hobby-dev"
+  ],
+  "environments": {
+    "review": {
+      "DATABASE_URL": {
+        "value": "postgres://localhost:5432/wineapi"
+      }
+    }
+  }
+}
