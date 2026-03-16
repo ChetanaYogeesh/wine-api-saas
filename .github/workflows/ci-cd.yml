@@ -74,6 +74,10 @@ jobs:
           source venv/bin/activate
           pip install -r requirements.txt
           
+      - name: Create test database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE wineapi_test;" || true
+
       - name: Run tests
         run: |
           source venv/bin/activate
