@@ -27,6 +27,32 @@ class User(Base):
 
     api_keys = relationship("APIKey", back_populates="user")
     usage_logs = relationship("UsageLog", back_populates="user")
+    webhooks = relationship("Webhook", back_populates="user")
+
+
+class Team(Base):
+    __tablename__ = "teams"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    members = relationship("TeamMember", back_populates="team")
+    owner = relationship("User", foreign_keys=[owner_id])
+
+
+class TeamMember(Base):
+    __tablename__ = "team_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(String(50), default="member")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    team = relationship("Team", back_populates="members")
+    user = relationship("User")
 
 
 class APIKey(Base):
@@ -36,6 +62,7 @@ class APIKey(Base):
     key = Column(String(64), unique=True, index=True, nullable=False)
     name = Column(String(255))
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     rate_limit = Column(Integer, default=60)
     monthly_limit = Column(Integer, default=10000)
@@ -44,6 +71,7 @@ class APIKey(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="api_keys")
+    team = relationship("Team")
 
 
 TIER_LIMITS = {
@@ -79,3 +107,51 @@ class UsageLog(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="usage_logs")
+
+
+class Webhook(Base):
+    __tablename__ = "webhooks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    url = Column(String(500), nullable=False)
+    events = Column(String(255))
+    secret = Column(String(64))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="webhooks")
+    deliveries = relationship("WebhookDelivery", back_populates="webhook")
+
+
+class WebhookDelivery(Base):
+    __tablename__ = "webhook_deliveries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    webhook_id = Column(Integer, ForeignKey("webhooks.id"), nullable=False)
+    event = Column(String(100), nullable=False)
+    payload = Column(Text)
+    status_code = Column(Integer)
+    response_body = Column(Text)
+    success = Column(Boolean, default=False)
+    attempts = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    webhook = relationship("Webhook", back_populates="deliveries")
+
+
+class WhiteLabelConfig(Base):
+    __tablename__ = "white_label_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    company_name = Column(String(255))
+    logo_url = Column(String(500))
+    primary_color = Column(String(7))
+    secondary_color = Column(String(7))
+    custom_domain = Column(String(255))
+    email_footer = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")

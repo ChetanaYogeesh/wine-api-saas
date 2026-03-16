@@ -17,7 +17,18 @@ import bcrypt
 from sqlalchemy.orm import Session
 
 from app.database import get_db, settings, engine, Base
-from app.models import User, Wine, APIKey, UsageLog, TIER_LIMITS
+from app.models import (
+    User,
+    Wine,
+    APIKey,
+    UsageLog,
+    TIER_LIMITS,
+    Webhook,
+    WebhookDelivery,
+    Team,
+    TeamMember,
+    WhiteLabelConfig,
+)
 from app.schemas import (
     Wine as WineSchema,
     WineListResponse,
@@ -28,6 +39,24 @@ from app.schemas import (
     APIKeyCreate,
     APIKeyResponse,
     UsageStats,
+    WebhookCreate,
+    WebhookUpdate,
+    WebhookResponse,
+    WebhookDeliveryResponse,
+    WEBHOOK_EVENTS,
+    AnalyticsResponse,
+    UsageByDay,
+    UsageByEndpoint,
+    UsageByStatus,
+    TeamCreate,
+    TeamUpdate,
+    TeamResponse,
+    TeamMemberResponse,
+    TeamAddMember,
+    TeamUpdateMember,
+    WhiteLabelCreate,
+    WhiteLabelUpdate,
+    WhiteLabelResponse,
 )
 
 pwd_context = None
@@ -721,3 +750,658 @@ def get_version():
             "1.0.0 - Initial release with PostgreSQL, Redis caching, Celery tasks",
         ],
     }
+
+
+def get_current_user_from_token(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+) -> User:
+    """Get current user from JWT token"""
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.jwt_algorithm]
+        )
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+@app.post("/webhooks", response_model=WebhookResponse)
+@limiter.limit("30/minute")
+def create_webhook(
+    webhook: WebhookCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Create a new webhook"""
+    import secrets
+
+    secret = secrets.token_hex(32)
+    db_webhook = Webhook(
+        user_id=current_user.id,
+        url=webhook.url,
+        events=",".join(webhook.events),
+        secret=secret,
+        is_active=True,
+    )
+    db.add(db_webhook)
+    db.commit()
+    db.refresh(db_webhook)
+    return db_webhook
+
+
+@app.get("/webhooks", response_model=list[WebhookResponse])
+def list_webhooks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """List all webhooks for current user"""
+    webhooks = db.query(Webhook).filter(Webhook.user_id == current_user.id).all()
+    return webhooks
+
+
+@app.get("/webhooks/{webhook_id}", response_model=WebhookResponse)
+def get_webhook(
+    webhook_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Get a specific webhook"""
+    webhook = (
+        db.query(Webhook)
+        .filter(Webhook.id == webhook_id, Webhook.user_id == current_user.id)
+        .first()
+    )
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    return webhook
+
+
+@app.patch("/webhooks/{webhook_id}", response_model=WebhookResponse)
+def update_webhook(
+    webhook_id: int,
+    webhook_update: WebhookUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Update a webhook"""
+    webhook = (
+        db.query(Webhook)
+        .filter(Webhook.id == webhook_id, Webhook.user_id == current_user.id)
+        .first()
+    )
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+
+    if webhook_update.url is not None:
+        webhook.url = webhook_update.url
+    if webhook_update.events is not None:
+        webhook.events = ",".join(webhook_update.events)
+    if webhook_update.is_active is not None:
+        webhook.is_active = webhook_update.is_active
+
+    db.commit()
+    db.refresh(webhook)
+    return webhook
+
+
+@app.delete("/webhooks/{webhook_id}")
+def delete_webhook(
+    webhook_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Delete a webhook"""
+    webhook = (
+        db.query(Webhook)
+        .filter(Webhook.id == webhook_id, Webhook.user_id == current_user.id)
+        .first()
+    )
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+
+    db.delete(webhook)
+    db.commit()
+    return {"detail": "Webhook deleted"}
+
+
+@app.get(
+    "/webhooks/{webhook_id}/deliveries", response_model=list[WebhookDeliveryResponse]
+)
+def list_webhook_deliveries(
+    webhook_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """List delivery history for a webhook"""
+    webhook = (
+        db.query(Webhook)
+        .filter(Webhook.id == webhook_id, Webhook.user_id == current_user.id)
+        .first()
+    )
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+
+    deliveries = (
+        db.query(WebhookDelivery)
+        .filter(WebhookDelivery.webhook_id == webhook_id)
+        .order_by(WebhookDelivery.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return deliveries
+
+
+@app.post("/webhooks/events")
+async def receive_webhook_event(
+    event: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """Internal endpoint to trigger webhooks for an event"""
+    webhooks = (
+        db.query(Webhook)
+        .filter(
+            Webhook.is_active == True,
+            Webhook.events.contains(event),
+        )
+        .all()
+    )
+
+    import httpx
+    import json
+    import hmac
+    import hashlib
+
+    for webhook in webhooks:
+        payload_str = json.dumps(payload)
+        signature = hmac.new(
+            webhook.secret.encode(),
+            payload_str.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+
+        delivery = WebhookDelivery(
+            webhook_id=webhook.id,
+            event=event,
+            payload=payload_str,
+            attempts=1,
+        )
+        db.add(delivery)
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    webhook.url,
+                    content=payload_str,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Webhook-Signature": signature,
+                        "X-Webhook-Event": event,
+                    },
+                )
+                delivery.status_code = response.status_code
+                delivery.response_body = response.text[:1000]
+                delivery.success = response.status_code < 400
+        except Exception as e:
+            delivery.status_code = 0
+            delivery.response_body = str(e)[:1000]
+            delivery.success = False
+
+        db.commit()
+
+    return {"delivered": len(webhooks)}
+
+
+@app.get("/analytics", response_model=AnalyticsResponse)
+@limiter.limit("30/minute")
+def get_analytics(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Get detailed analytics for the current user"""
+    from datetime import datetime, timezone, timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    logs = (
+        db.query(UsageLog)
+        .filter(
+            UsageLog.user_id == current_user.id,
+            UsageLog.timestamp >= cutoff,
+        )
+        .all()
+    )
+
+    total_requests = len(logs)
+    avg_response_time = sum(log.response_time_ms or 0 for log in logs) / max(
+        total_requests, 1
+    )
+    success_count = sum(1 for log in logs if log.status_code and log.status_code < 400)
+    success_rate = (success_count / max(total_requests, 1)) * 100
+
+    usage_by_day = {}
+    for log in logs:
+        date_str = log.timestamp.strftime("%Y-%m-%d")
+        usage_by_day[date_str] = usage_by_day.get(date_str, 0) + 1
+
+    usage_by_day_list = [
+        UsageByDay(date=date, count=count)
+        for date, count in sorted(usage_by_day.items())
+    ]
+
+    usage_by_endpoint = {}
+    for log in logs:
+        usage_by_endpoint[log.endpoint] = usage_by_endpoint.get(log.endpoint, 0) + 1
+
+    usage_by_endpoint_list = [
+        UsageByEndpoint(endpoint=ep, count=c)
+        for ep, c in sorted(
+            usage_by_endpoint.items(), key=lambda x: x[1], reverse=True
+        )[:10]
+    ]
+
+    usage_by_status = {}
+    for log in logs:
+        if log.status_code:
+            usage_by_status[log.status_code] = (
+                usage_by_status.get(log.status_code, 0) + 1
+            )
+
+    usage_by_status_list = [
+        UsageByStatus(status_code=sc, count=c)
+        for sc, c in sorted(usage_by_status.items())
+    ]
+
+    return AnalyticsResponse(
+        total_requests=total_requests,
+        avg_response_time_ms=round(avg_response_time, 2),
+        success_rate=round(success_rate, 2),
+        usage_by_day=usage_by_day_list,
+        usage_by_endpoint=usage_by_endpoint_list,
+        usage_by_status=usage_by_status_list,
+    )
+
+
+@app.get("/analytics/export")
+@limiter.limit("10/minute")
+def export_analytics(
+    request: Request,
+    days: int = Query(30, ge=1, le=90),
+    format: str = Query("json", regex="^(json|csv)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Export analytics data in JSON or CSV format"""
+    from datetime import datetime, timezone, timedelta
+    import csv
+    import io
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    logs = (
+        db.query(UsageLog)
+        .filter(
+            UsageLog.user_id == current_user.id,
+            UsageLog.timestamp >= cutoff,
+        )
+        .order_by(UsageLog.timestamp.desc())
+        .all()
+    )
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            ["id", "endpoint", "method", "status_code", "response_time_ms", "timestamp"]
+        )
+        for log in logs:
+            writer.writerow(
+                [
+                    log.id,
+                    log.endpoint,
+                    log.method,
+                    log.status_code,
+                    log.response_time_ms,
+                    log.timestamp.isoformat(),
+                ]
+            )
+        return {"data": output.getvalue(), "content_type": "text/csv"}
+    else:
+        return {
+            "data": [
+                {
+                    "id": log.id,
+                    "endpoint": log.endpoint,
+                    "method": log.method,
+                    "status_code": log.status_code,
+                    "response_time_ms": log.response_time_ms,
+                    "timestamp": log.timestamp.isoformat(),
+                }
+                for log in logs
+            ],
+            "content_type": "application/json",
+        }
+
+
+@app.post("/teams", response_model=TeamResponse)
+@limiter.limit("20/minute")
+def create_team(
+    team: TeamCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Create a new team"""
+    db_team = Team(name=team.name, owner_id=current_user.id)
+    db.add(db_team)
+    db.commit()
+    db.refresh(db_team)
+    return db_team
+
+
+@app.get("/teams", response_model=list[TeamResponse])
+def list_teams(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """List all teams the user belongs to"""
+    owned_teams = db.query(Team).filter(Team.owner_id == current_user.id).all()
+    memberships = (
+        db.query(TeamMember).filter(TeamMember.user_id == current_user.id).all()
+    )
+    member_team_ids = [m.team_id for m in memberships]
+    member_teams = (
+        db.query(Team).filter(Team.id.in_(member_team_ids)).all()
+        if member_team_ids
+        else []
+    )
+    return owned_teams + member_teams
+
+
+@app.get("/teams/{team_id}", response_model=TeamResponse)
+def get_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Get a specific team"""
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    is_member = (
+        team.owner_id == current_user.id
+        or db.query(TeamMember)
+        .filter(TeamMember.team_id == team_id, TeamMember.user_id == current_user.id)
+        .first()
+    )
+    if not is_member:
+        raise HTTPException(status_code=403, detail="Not a member of this team")
+    return team
+
+
+@app.patch("/teams/{team_id}", response_model=TeamResponse)
+def update_team(
+    team_id: int,
+    team_update: TeamUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Update a team (owner only)"""
+    team = (
+        db.query(Team)
+        .filter(Team.id == team_id, Team.owner_id == current_user.id)
+        .first()
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found or not authorized")
+    if team_update.name:
+        team.name = team_update.name
+    db.commit()
+    db.refresh(team)
+    return team
+
+
+@app.delete("/teams/{team_id}")
+def delete_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Delete a team (owner only)"""
+    team = (
+        db.query(Team)
+        .filter(Team.id == team_id, Team.owner_id == current_user.id)
+        .first()
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found or not authorized")
+    db.query(TeamMember).filter(TeamMember.team_id == team_id).delete()
+    db.delete(team)
+    db.commit()
+    return {"detail": "Team deleted"}
+
+
+@app.post("/teams/{team_id}/members", response_model=TeamMemberResponse)
+def add_team_member(
+    team_id: int,
+    member: TeamAddMember,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Add a member to a team (owner only)"""
+    team = (
+        db.query(Team)
+        .filter(Team.id == team_id, Team.owner_id == current_user.id)
+        .first()
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found or not authorized")
+    user = db.query(User).filter(User.email == member.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    existing = (
+        db.query(TeamMember)
+        .filter(TeamMember.team_id == team_id, TeamMember.user_id == user.id)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="User is already a member")
+    db_member = TeamMember(team_id=team_id, user_id=user.id, role=member.role)
+    db.add(db_member)
+    db.commit()
+    db.refresh(db_member)
+    return db_member
+
+
+@app.get("/teams/{team_id}/members", response_model=list[TeamMemberResponse])
+def list_team_members(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """List team members"""
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    is_member = (
+        team.owner_id == current_user.id
+        or db.query(TeamMember)
+        .filter(TeamMember.team_id == team_id, TeamMember.user_id == current_user.id)
+        .first()
+    )
+    if not is_member:
+        raise HTTPException(status_code=403, detail="Not a member of this team")
+    members = db.query(TeamMember).filter(TeamMember.team_id == team_id).all()
+    result = []
+    for m in members:
+        user = db.query(User).filter(User.id == m.user_id).first()
+        if user:
+            result.append(
+                TeamMemberResponse(
+                    id=m.id,
+                    user_id=m.user_id,
+                    email=user.email,
+                    full_name=user.full_name,
+                    role=m.role,
+                    created_at=m.created_at,
+                )
+            )
+    return result
+
+
+@app.patch("/teams/{team_id}/members/{member_id}", response_model=TeamMemberResponse)
+def update_team_member(
+    team_id: int,
+    member_id: int,
+    member_update: TeamUpdateMember,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Update a team member's role (owner only)"""
+    team = (
+        db.query(Team)
+        .filter(Team.id == team_id, Team.owner_id == current_user.id)
+        .first()
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found or not authorized")
+    member = (
+        db.query(TeamMember)
+        .filter(TeamMember.id == member_id, TeamMember.team_id == team_id)
+        .first()
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    member.role = member_update.role
+    db.commit()
+    db.refresh(member)
+    user = db.query(User).filter(User.id == member.user_id).first()
+    return TeamMemberResponse(
+        id=member.id,
+        user_id=member.user_id,
+        email=user.email,
+        full_name=user.full_name,
+        role=member.role,
+        created_at=member.created_at,
+    )
+
+
+@app.delete("/teams/{team_id}/members/{member_id}")
+def remove_team_member(
+    team_id: int,
+    member_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Remove a team member (owner only)"""
+    team = (
+        db.query(Team)
+        .filter(Team.id == team_id, Team.owner_id == current_user.id)
+        .first()
+    )
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found or not authorized")
+    member = (
+        db.query(TeamMember)
+        .filter(TeamMember.id == member_id, TeamMember.team_id == team_id)
+        .first()
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    db.delete(member)
+    db.commit()
+    return {"detail": "Member removed"}
+
+
+@app.post("/white-label", response_model=WhiteLabelResponse)
+@limiter.limit("10/minute")
+def create_white_label_config(
+    config: WhiteLabelCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Create white-label configuration"""
+    existing = (
+        db.query(WhiteLabelConfig)
+        .filter(WhiteLabelConfig.user_id == current_user.id)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="White-label config already exists")
+    db_config = WhiteLabelConfig(
+        user_id=current_user.id, **config.dict(exclude_unset=True)
+    )
+    db.add(db_config)
+    db.commit()
+    db.refresh(db_config)
+    return db_config
+
+
+@app.get("/white-label", response_model=WhiteLabelResponse)
+def get_white_label_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Get white-label configuration"""
+    config = (
+        db.query(WhiteLabelConfig)
+        .filter(WhiteLabelConfig.user_id == current_user.id)
+        .first()
+    )
+    if not config:
+        raise HTTPException(status_code=404, detail="White-label config not found")
+    return config
+
+
+@app.patch("/white-label", response_model=WhiteLabelResponse)
+def update_white_label_config(
+    config_update: WhiteLabelUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Update white-label configuration"""
+    config = (
+        db.query(WhiteLabelConfig)
+        .filter(WhiteLabelConfig.user_id == current_user.id)
+        .first()
+    )
+    if not config:
+        raise HTTPException(status_code=404, detail="White-label config not found")
+    for key, value in config_update.dict(exclude_unset=True).items():
+        setattr(config, key, value)
+    db.commit()
+    db.refresh(config)
+    return config
+
+
+@app.delete("/white-label")
+def delete_white_label_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Delete white-label configuration"""
+    config = (
+        db.query(WhiteLabelConfig)
+        .filter(WhiteLabelConfig.user_id == current_user.id)
+        .first()
+    )
+    if not config:
+        raise HTTPException(status_code=404, detail="White-label config not found")
+    db.delete(config)
+    db.commit()
+    return {"detail": "White-label config deleted"}

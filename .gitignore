@@ -14,3 +14,8 @@ build/
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/

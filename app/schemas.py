@@ -106,3 +106,160 @@ class UsageStats(BaseModel):
     avg_response_time_ms: float
     top_endpoints: list[dict]
     requests_by_status: dict[str, int]
+
+
+WEBHOOK_EVENTS = [
+    "wine.created",
+    "wine.updated",
+    "wine.deleted",
+    "api_key.created",
+    "api_key.deleted",
+    "usage.alert",
+]
+
+
+class WebhookBase(BaseModel):
+    url: str
+    events: list[str]
+
+
+class WebhookCreate(WebhookBase):
+    pass
+
+
+class WebhookUpdate(BaseModel):
+    url: Optional[str] = None
+    events: Optional[list[str]] = None
+    is_active: Optional[bool] = None
+
+
+class WebhookResponse(WebhookBase):
+    id: int
+    user_id: int
+    secret: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WebhookDeliveryBase(BaseModel):
+    event: str
+    payload: str
+
+
+class WebhookDeliveryResponse(WebhookDeliveryBase):
+    id: int
+    webhook_id: int
+    status_code: Optional[int]
+    response_body: Optional[str]
+    success: bool
+    attempts: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AnalyticsBase(BaseModel):
+    pass
+
+
+class UsageByDay(BaseModel):
+    date: str
+    count: int
+
+
+class UsageByEndpoint(BaseModel):
+    endpoint: str
+    count: int
+
+
+class UsageByStatus(BaseModel):
+    status_code: int
+    count: int
+
+
+class AnalyticsResponse(BaseModel):
+    total_requests: int
+    avg_response_time_ms: float
+    success_rate: float
+    usage_by_day: list[UsageByDay]
+    usage_by_endpoint: list[UsageByEndpoint]
+    usage_by_status: list[UsageByStatus]
+
+
+class TeamBase(BaseModel):
+    name: str
+
+
+class TeamCreate(TeamBase):
+    pass
+
+
+class TeamUpdate(BaseModel):
+    name: Optional[str] = None
+
+
+class TeamMemberResponse(BaseModel):
+    id: int
+    user_id: int
+    email: str
+    full_name: Optional[str]
+    role: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TeamResponse(TeamBase):
+    id: int
+    owner_id: int
+    created_at: datetime
+    members: list[TeamMemberResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class TeamAddMember(BaseModel):
+    email: str
+    role: str = "member"
+
+
+class TeamUpdateMember(BaseModel):
+    role: str
+
+
+class WhiteLabelBase(BaseModel):
+    company_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    custom_domain: Optional[str] = None
+    email_footer: Optional[str] = None
+
+
+class WhiteLabelCreate(WhiteLabelBase):
+    pass
+
+
+class WhiteLabelUpdate(BaseModel):
+    company_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    custom_domain: Optional[str] = None
+    email_footer: Optional[str] = None
+
+
+class WhiteLabelResponse(WhiteLabelBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
