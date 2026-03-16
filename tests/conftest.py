@@ -3,8 +3,6 @@ import sys
 import pytest
 import tempfile
 from pathlib import Path
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -55,23 +53,28 @@ TEST_WINES = [
 ]
 
 
-@pytest.fixture(scope="session")
-def test_db_url():
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_env():
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    yield f"sqlite:///{path}"
-    os.unlink(path)
+    os.environ["DATABASE_URL"] = f"sqlite:///{path}"
+    yield
+    try:
+        os.unlink(path)
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="session")
-def setup_test_db(test_db_url):
-    engine = create_engine(
-        test_db_url, connect_args={"check_same_thread": False}, echo=False
-    )
-
+def test_engine():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
     from app.database import Base
     from app.models import User, APIKey, Wine
 
+    engine = create_engine(
+        os.environ["DATABASE_URL"], connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(bind=engine)
 
     Session = sessionmaker(bind=engine)
@@ -98,66 +101,48 @@ def setup_test_db(test_db_url):
     session.add(api_key)
 
     for wine_data in TEST_WINES:
-        wine = Wine(**wine_data)
-        session.add(wine)
+        session.add(Wine(**wine_data))
 
     session.commit()
     session.close()
 
     yield engine
-
     engine.dispose()
 
 
 @pytest.fixture(scope="function")
-def test_session(setup_test_db):
-
-    engine = setup_test_db
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
-    yield session
-
-    session.close()
-
-
-@pytest.fixture(scope="function")
-def client(test_session):
+def client(test_engine):
+    from sqlalchemy.orm import sessionmaker
     from fastapi.testclient import TestClient
-    from app import database
     from app.models import Wine, UsageLog
-    from app.database import get_db
+
+    TestSession = sessionmaker(bind=test_engine)
+    session = TestSession()
 
     try:
-        test_session.query(UsageLog).delete()
+        session.query(UsageLog).delete()
     except Exception:
         pass
 
-    for wine in test_session.query(Wine).all():
-        test_session.delete(wine)
+    session.query(Wine).delete()
     for wine_data in TEST_WINES:
-        wine = Wine(**wine_data)
-        test_session.add(wine)
+        session.add(Wine(**wine_data))
+    session.commit()
 
-    test_session.commit()
-
-    TestSessionLocal = sessionmaker(
-        bind=test_session.get_bind(), autocommit=False, autoflush=False
-    )
-
-    def _get_test_db():
-        db = TestSessionLocal()
+    def override_get_db():
         try:
-            yield db
+            yield session
         finally:
-            db.close()
+            pass
 
     from app.main import app
+    from app.database import get_db
 
-    app.dependency_overrides[get_db] = _get_test_db
+    app.dependency_overrides[get_db] = override_get_db
 
     yield TestClient(app)
 
+    session.close()
     app.dependency_overrides.clear()
 
 
