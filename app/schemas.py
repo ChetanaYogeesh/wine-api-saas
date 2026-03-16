@@ -63,8 +63,10 @@ class TokenData(BaseModel):
 
 class APIKeyBase(BaseModel):
     name: Optional[str] = None
-    rate_limit: int = 60
-    monthly_limit: int = 10000
+    tier: str = "free"
+
+
+TIER_CHOICES = ["free", "pro", "enterprise"]
 
 
 class APIKeyCreate(APIKeyBase):
@@ -95,3 +97,12 @@ class UsageLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UsageStats(BaseModel):
+    total_requests: int
+    requests_today: int
+    requests_this_month: int
+    avg_response_time_ms: float
+    top_endpoints: list[dict]
+    requests_by_status: dict[str, int]

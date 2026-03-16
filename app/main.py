@@ -17,7 +17,7 @@ import bcrypt
 from sqlalchemy.orm import Session
 
 from app.database import get_db, settings, engine, Base
-from app.models import User, Wine, APIKey, UsageLog
+from app.models import User, Wine, APIKey, UsageLog, TIER_LIMITS
 from app.schemas import (
     Wine as WineSchema,
     WineListResponse,
@@ -27,6 +27,7 @@ from app.schemas import (
     Token,
     APIKeyCreate,
     APIKeyResponse,
+    UsageStats,
 )
 
 pwd_context = None
@@ -52,6 +53,22 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 security_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
+def check_monthly_limit(db_key: APIKey, db: Session) -> bool:
+    """Check if user has exceeded their monthly limit"""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    request_count = (
+        db.query(UsageLog)
+        .filter(UsageLog.api_key_id == db_key.id, UsageLog.timestamp >= month_start)
+        .count()
+    )
+
+    return request_count < db_key.monthly_limit
+
+
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return {"detail": "Rate limit exceeded. Please try again later."}
@@ -64,6 +81,50 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def track_usage(request: Request, call_next):
+    """Track API usage for each request"""
+    start_time = datetime.utcnow()
+
+    response = await call_next(request)
+
+    # Only track API endpoints
+    if (
+        request.url.path.startswith("/wines")
+        or request.url.path.startswith("/regions")
+        or request.url.path.startswith("/varieties")
+    ):
+        # Get API key from header
+        api_key = request.headers.get("X-API-Key")
+        if api_key:
+            from app.database import SessionLocal
+
+            db = SessionLocal()
+            try:
+                db_key = db.query(APIKey).filter(APIKey.key == api_key).first()
+                if db_key:
+                    import time
+
+                    response_time = int(
+                        (datetime.utcnow() - start_time).total_seconds() * 1000
+                    )
+
+                    log = UsageLog(
+                        api_key_id=db_key.id,
+                        user_id=db_key.user_id,
+                        endpoint=request.url.path,
+                        method=request.method,
+                        status_code=response.status_code,
+                        response_time_ms=response_time,
+                    )
+                    db.add(log)
+                    db.commit()
+            finally:
+                db.close()
+
+    return response
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -86,6 +147,13 @@ async def verify_api_key(
     )
     if not db_key:
         raise HTTPException(status_code=403, detail="Invalid API key")
+
+    if not check_monthly_limit(db_key, db):
+        raise HTTPException(
+            status_code=429,
+            detail="Monthly API limit exceeded. Please upgrade your plan.",
+        )
+
     return db_key
 
 
@@ -167,12 +235,16 @@ async def create_api_key(
 
     key = secrets.token_urlsafe(32)
 
+    tier = api_key.tier
+    limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
+
     db_key = APIKey(
         key=key,
         name=api_key.name,
         user_id=current_user.id,
-        rate_limit=api_key.rate_limit,
-        monthly_limit=api_key.monthly_limit,
+        tier=tier,
+        rate_limit=limits["rate_limit"],
+        monthly_limit=limits["monthly_limit"],
     )
     db.add(db_key)
     db.commit()
@@ -514,3 +586,80 @@ async def list_varieties(
 ):
     varieties = db.query(Wine.variety).distinct().filter(Wine.variety.isnot(None)).all()
     return {"varieties": sorted([v[0] for v in varieties if v[0]])}
+
+
+@app.get("/usage", response_model=UsageStats)
+@limiter.limit("30/minute")
+async def get_usage_stats(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get usage statistics for the current user"""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    logs = db.query(UsageLog).filter(UsageLog.user_id == current_user.id).all()
+
+    total_requests = len(logs)
+    requests_today = len([l for l in logs if l.timestamp >= today_start])
+    requests_this_month = len([l for l in logs if l.timestamp >= month_start])
+
+    response_times = [l.response_time_ms for l in logs if l.response_time_ms]
+    avg_response_time = (
+        sum(response_times) / len(response_times) if response_times else 0
+    )
+
+    endpoint_counts = {}
+    for log in logs:
+        endpoint_counts[log.endpoint] = endpoint_counts.get(log.endpoint, 0) + 1
+    top_endpoints = sorted(
+        [{"endpoint": k, "count": v} for k, v in endpoint_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:5]
+
+    status_counts = {}
+    for log in logs:
+        status_counts[str(log.status_code)] = (
+            status_counts.get(str(log.status_code), 0) + 1
+        )
+
+    return UsageStats(
+        total_requests=total_requests,
+        requests_today=requests_today,
+        requests_this_month=requests_this_month,
+        avg_response_time_ms=round(avg_response_time, 2),
+        top_endpoints=top_endpoints,
+        requests_by_status=status_counts,
+    )
+
+
+@app.get("/tiers")
+def list_tiers():
+    """List available API tiers"""
+    return {
+        "tiers": [
+            {
+                "name": "free",
+                "monthly_limit": 1000,
+                "rate_limit": 60,
+                "price": "$0/month",
+            },
+            {
+                "name": "pro",
+                "monthly_limit": 50000,
+                "rate_limit": 300,
+                "price": "$29/month",
+            },
+            {
+                "name": "enterprise",
+                "monthly_limit": 1000000,
+                "rate_limit": 1000,
+                "price": "$99/month",
+            },
+        ]
+    }

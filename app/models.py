@@ -39,10 +39,18 @@ class APIKey(Base):
     is_active = Column(Boolean, default=True)
     rate_limit = Column(Integer, default=60)
     monthly_limit = Column(Integer, default=10000)
+    tier = Column(String(50), default="free")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="api_keys")
+
+
+TIER_LIMITS = {
+    "free": {"monthly_limit": 1000, "rate_limit": 60},
+    "pro": {"monthly_limit": 50000, "rate_limit": 300},
+    "enterprise": {"monthly_limit": 1000000, "rate_limit": 1000},
+}
 
 
 class Wine(Base):
