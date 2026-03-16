@@ -37,29 +37,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-          
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
     steps:
       - uses: actions/checkout@v4
       
@@ -73,16 +50,10 @@ jobs:
           python -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
-          
-      - name: Create test database
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE wineapi_test;" || true
 
       - name: Run tests
         run: |
           source venv/bin/activate
-          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wineapi_test \
-          REDIS_URL=redis://localhost:6379/0 \
           pytest tests/ -v
 
   build:

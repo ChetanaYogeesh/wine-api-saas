@@ -126,6 +126,7 @@ def client(test_session):
     from fastapi.testclient import TestClient
     from app import database
     from app.models import Wine, UsageLog
+    from app.database import get_db
 
     try:
         test_session.query(UsageLog).delete()
@@ -151,11 +152,13 @@ def client(test_session):
         finally:
             db.close()
 
-    database.get_db = _get_test_db
-
     from app.main import app
 
-    return TestClient(app)
+    app.dependency_overrides[get_db] = _get_test_db
+
+    yield TestClient(app)
+
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
