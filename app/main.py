@@ -1,7 +1,5 @@
-import os
 from datetime import datetime, timedelta
 from typing import Optional
-import pandas as pd
 from fastapi import FastAPI, Query, HTTPException, Request, Depends
 from fastapi.security import (
     APIKeyHeader,
@@ -43,7 +41,6 @@ from app.schemas import (
     WebhookUpdate,
     WebhookResponse,
     WebhookDeliveryResponse,
-    WEBHOOK_EVENTS,
     AnalyticsResponse,
     UsageByDay,
     UsageByEndpoint,
@@ -134,8 +131,6 @@ async def track_usage(request: Request, call_next):
             try:
                 db_key = db.query(APIKey).filter(APIKey.key == api_key).first()
                 if db_key:
-                    import time
-
                     response_time = int(
                         (datetime.utcnow() - start_time).total_seconds() * 1000
                     )
@@ -171,9 +166,7 @@ async def verify_api_key(
     if not api_key:
         raise HTTPException(status_code=403, detail="API key required")
 
-    db_key = (
-        db.query(APIKey).filter(APIKey.key == api_key, APIKey.is_active == True).first()
-    )
+    db_key = db.query(APIKey).filter(APIKey.key == api_key, APIKey.is_active).first()
     if not db_key:
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -456,111 +449,6 @@ async def get_wine(
         raise HTTPException(status_code=404, detail="Wine not found")
     return wine
 
-    total = query.count()
-    wines = query.offset((page - 1) * limit).limit(limit).all()
-
-    return WineListResponse(
-        wines=[
-            WineSchema(
-                id=w.id,
-                name=w.name,
-                region=w.region,
-                variety=w.variety,
-                rating=w.rating,
-                notes=w.notes,
-            )
-            for w in wines
-        ],
-        total=total,
-        page=page,
-        limit=limit,
-    )
-
-
-@app.get("/wines/top-rated", response_model=WineListResponse)
-@limiter.limit("60/minute")
-async def top_rated_wines(
-    request: Request,
-    api_key: APIKey = Depends(verify_api_key),
-    limit: int = Query(10, ge=1, le=100),
-    region: Optional[str] = None,
-    db: Session = Depends(get_db),
-):
-    query = db.query(Wine).filter(Wine.rating.isnot(None)).order_by(Wine.rating.desc())
-
-    if region:
-        query = query.filter(Wine.region.ilike(f"%{region}%"))
-
-    wines = query.limit(limit).all()
-
-    return WineListResponse(
-        wines=[
-            WineSchema(
-                id=w.id,
-                name=w.name,
-                region=w.region,
-                variety=w.variety,
-                rating=w.rating,
-                notes=w.notes,
-            )
-            for w in wines
-        ],
-        total=len(wines),
-        page=1,
-        limit=limit,
-    )
-
-
-@app.get("/wines/stats", response_model=WineStats)
-@limiter.limit("60/minute")
-async def wine_stats(
-    request: Request,
-    api_key: APIKey = Depends(verify_api_key),
-    db: Session = Depends(get_db),
-):
-    from app.cache import stats_cache
-
-    cached = stats_cache.get("stats")
-    if cached:
-        return WineStats(**cached)
-
-    total = db.query(Wine).count()
-
-    wines_with_rating = db.query(Wine).filter(Wine.rating.isnot(None)).all()
-    avg_rating = (
-        sum(w.rating for w in wines_with_rating) / len(wines_with_rating)
-        if wines_with_rating
-        else 0
-    )
-
-    regions = {}
-    for w in wines_with_rating:
-        if w.region:
-            regions[w.region] = regions.get(w.region, 0) + 1
-    top_region = max(regions, default="N/A")
-
-    distribution = {"90-94": 0, "85-89": 0, "95+": 0, "0-85": 0}
-    for w in wines_with_rating:
-        if w.rating >= 95:
-            distribution["95+"] += 1
-        elif w.rating >= 90:
-            distribution["90-94"] += 1
-        elif w.rating >= 85:
-            distribution["85-89"] += 1
-        else:
-            distribution["0-85"] += 1
-
-    stats = {
-        "total_wines": total,
-        "avg_rating": round(avg_rating, 2),
-        "top_region": top_region,
-        "rating_distribution": distribution,
-    }
-
-    stats_cache.set("stats", stats)
-
-    return WineStats(**stats)
-
 
 @app.get("/regions")
 @limiter.limit("60/minute")
@@ -662,10 +550,10 @@ async def get_usage_stats(
     logs = db.query(UsageLog).filter(UsageLog.user_id == current_user.id).all()
 
     total_requests = len(logs)
-    requests_today = len([l for l in logs if l.timestamp >= today_start])
-    requests_this_month = len([l for l in logs if l.timestamp >= month_start])
+    requests_today = len([log for log in logs if log.timestamp >= today_start])
+    requests_this_month = len([log for log in logs if log.timestamp >= month_start])
 
-    response_times = [l.response_time_ms for l in logs if l.response_time_ms]
+    response_times = [log.response_time_ms for log in logs if log.response_time_ms]
     avg_response_time = (
         sum(response_times) / len(response_times) if response_times else 0
     )
@@ -913,7 +801,7 @@ async def receive_webhook_event(
     webhooks = (
         db.query(Webhook)
         .filter(
-            Webhook.is_active == True,
+            Webhook.is_active,
             Webhook.events.contains(event),
         )
         .all()
