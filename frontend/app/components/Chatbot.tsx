@@ -1,10 +1,17 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { apiKeys } from '../../lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+}
+
+interface APIKey {
+  id: number;
+  key: string;
+  name: string;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -17,13 +24,37 @@ export default function Chatbot() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string>('');
+  const [apiKeyList, setApiKeyList] = useState<APIKey[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (isOpen && apiKeyList.length === 0) {
+      loadApiKeys();
+    }
+  }, [isOpen]);
+
+  const loadApiKeys = async () => {
+    try {
+      const keys = await apiKeys.list();
+      setApiKeyList(keys);
+      if (keys.length > 0 && !selectedKey) {
+        setSelectedKey(keys[0].key);
+      }
+    } catch (err) {
+      console.error('Failed to load API keys:', err);
+    }
+  };
+
   const callOllama = async (userMessage: string) => {
+    if (!selectedKey) {
+      throw new Error('No API key selected. Please add an API key in the dashboard.');
+    }
+
     const conversation = [
       ...messages,
       { role: 'user' as const, content: userMessage }
@@ -31,7 +62,10 @@ export default function Chatbot() {
 
     const response = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-API-Key': selectedKey,
+      },
       body: JSON.stringify({ messages: conversation }),
     });
 
@@ -101,6 +135,22 @@ export default function Chatbot() {
             <h3 className="font-semibold text-lg">Wine API Assistant</h3>
             <p className="text-purple-100 text-sm">Powered by local LLM</p>
           </div>
+
+          {apiKeyList.length > 0 && (
+            <div className="px-3 py-2 bg-gray-100 border-b">
+              <select
+                value={selectedKey}
+                onChange={(e) => setSelectedKey(e.target.value)}
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+              >
+                {apiKeyList.map((key) => (
+                  <option key={key.id} value={key.key}>
+                    {key.name || 'API Key'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
             {messages.map((msg, i) => (
