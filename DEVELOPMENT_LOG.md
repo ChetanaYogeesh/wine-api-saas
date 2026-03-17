@@ -1301,17 +1301,84 @@ All 18 tests pass after Phase 3, 4, and security implementations:
 - `app/graphql.py` - GraphQL schema
 - `app/recommendations.py` - Recommendation and price tracking services
 - `app/security.py` - Security utilities
+- `app/chat.py` - Ollama/Local LLM chat endpoint
 - `sdks/README.md` - SDK documentation
 - `sdks/python/README.md`
 - `sdks/javascript/README.md`
 - `sdks/swift/README.md`
 - `sdks/kotlin/README.md`
 - `SECURITY.md` - Security documentation
+- `frontend/app/components/Chatbot.tsx` - AI Chatbot component
 
 ### Modified Files
 - `app/models.py` - Added WinePriceHistory, WinePreference, WineRecommendation, MarketplaceListing, MarketplaceTransaction
 - `app/schemas.py` - Added Phase 3/4 schemas
-- `app/main.py` - Added endpoints, security middleware, imports
+- `app/main.py` - Added endpoints, security middleware, chat router
+- `frontend/app/dashboard/page.tsx` - Added Chatbot component
+- `frontend/lib/api.ts` - Added apiKeys export for chatbot
+- `frontend/package.json` - Upgraded Next.js to 16.1.7
+- `README.md` - Added chatbot and local LLM setup instructions
+
+---
+
+## Chatbot Implementation
+
+### Backend (`app/chat.py`)
+- `/chat` endpoint connecting to local Ollama instance
+- API key authentication required
+- Rate limited to 10 requests/minute
+- Input validation (max message length, message count)
+- Output sanitization (remove URLs, control characters)
+- Model whitelist enforcement
+- System prompt for wine-related responses
+
+### Frontend (`frontend/app/components/Chatbot.tsx`)
+- Floating widget UI with open/close animation
+- API key selector dropdown
+- Conversation history maintained
+- Error handling for Ollama connection issues
+- Added to dashboard page
+
+### Setup Required
+```bash
+# Install Ollama
+brew install ollama
+
+# Start service
+ollama serve
+
+# Pull model
+ollama pull llama3.2
+```
+
+---
+
+## Security Enhancements (Chat Endpoint)
+
+### Authentication
+- API key required (X-API-Key header)
+- Validates against database
+
+### Rate Limiting
+- 10 requests/minute per API key
+
+### Input Validation
+- Max 2000 chars per message
+- Max 20 messages per request
+- Max 500 tokens in response
+- Temperature: 0-2
+
+### Model Restrictions
+- Whitelist: llama3.2, llama3.1, llama3, mistral, codellama, phi3
+
+### Sanitization
+- Removes URLs from responses
+- Removes control characters
+- Truncates long responses
+
+### Ollama Security
+- Only accessible via localhost
+- Not exposed to internet
 - `README.md` - Updated features and endpoints
 - `PRD.md` - Marked phases as complete
 - `DEVELOPMENT_LOG.md` - Updated with implementation details

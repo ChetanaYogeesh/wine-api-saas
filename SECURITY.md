@@ -13,6 +13,7 @@ This document outlines the security features and best practices implemented in t
 7. [Data Sanitization](#data-sanitization)
 8. [IDOR Protection](#idor-protection)
 9. [Database Security](#database-security)
+10. [Chat Endpoint Security](#chat-endpoint-security)
 
 ---
 
@@ -345,5 +346,50 @@ All 18 tests pass with the security enhancements in place.
 
 ---
 
-**Document Version:** 1.0  
+## Chat Endpoint Security
+
+The `/chat` endpoint provides AI-powered chatbot functionality using a local LLM (Ollama). It includes additional security measures:
+
+### Authentication
+- **API Key Required** - All requests must include valid `X-API-Key` header
+- Keys are validated against the database and must be active
+
+### Rate Limiting
+- **10 requests/minute** - Prevents abuse of AI resources
+- Applied per API key
+
+### Input Validation
+- Maximum 2000 characters per message
+- Maximum 20 messages per request
+- Maximum 500 tokens in response
+- Temperature must be between 0 and 2
+
+### Model Restrictions
+Only whitelisted models are allowed:
+- `llama3.2`, `llama3.1`, `llama3`
+- `mistral`, `codellama`, `phi3`
+
+### Output Sanitization
+- Removes URLs from AI responses
+- Removes control characters
+- Truncates excessively long responses (max 10000 chars)
+
+### Ollama Security
+- Ollama binds to `localhost:11434` only
+- Not exposed to public internet
+- No external API calls
+
+### Usage
+
+```bash
+# Chat request requires API key
+curl -X POST http://localhost:8000/chat \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"What pairs well with steak?"}]}'
+```
+
+---
+
+**Document Version:** 1.1  
 **Last Updated:** March 17, 2026

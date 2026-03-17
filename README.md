@@ -29,6 +29,7 @@ A production-ready Wine API platform with 32,780 wine records, built with FastAP
 - **AI Recommendations** - Smart wine recommendations based on preferences
 - **Price Tracking** - Track wine prices over time from multiple retailers
 - **Marketplace** - Buy and sell wines through the platform
+- **AI Chatbot** - Local LLM-powered assistant (requires Ollama)
 
 ## Tech Stack
 
@@ -132,6 +133,24 @@ npm run dev
 | CRUD | `/teams/*` | Team management |
 | CRUD | `/white-label` | White-label config |
 | GET | `/graphql` | GraphQL API |
+| POST | `/chat` | AI Chatbot (requires API key) |
+
+## Local LLM Setup (Optional)
+
+Enable the AI chatbot in the dashboard by running Ollama locally:
+
+```bash
+# Install Ollama (macOS/Linux)
+brew install ollama
+
+# Start Ollama
+ollama serve
+
+# Pull a model (llama3.2 recommended, ~2GB)
+ollama pull llama3.2
+```
+
+The chatbot is available in the dashboard and requires an API key for authentication.
 
 ## API Key Usage
 
@@ -139,9 +158,14 @@ npm run dev
 # Get wines with API key
 curl -H "X-API-Key: your-api-key" http://localhost:8000/wines
 
-# Get stats
-curl -H "X-API-Key: your-api-key" http://localhost:8000/wines/stats
+# Chat with AI assistant
+curl -X POST -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"What is a good red wine?"}]}' \
+  http://localhost:8000/chat
 ```
+
+## Environment Variables
 
 ## Environment Variables
 
