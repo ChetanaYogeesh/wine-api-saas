@@ -2,7 +2,7 @@ import strawberry
 from typing import List, Optional
 from datetime import datetime
 from app.database import SessionLocal
-from app.models import Wine, User, APIKey, UsageLog
+from app.models import Wine
 
 
 @strawberry.type

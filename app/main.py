@@ -8,6 +8,9 @@ from fastapi.security import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
+from app.security import ValidationError
+from strawberry.fastapi import GraphQLRouter
+from app.graphql import schema
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from jose import JWTError, jwt
@@ -26,10 +29,6 @@ from app.models import (
     Team,
     TeamMember,
     WhiteLabelConfig,
-    WinePreference,
-    WinePriceHistory,
-    MarketplaceListing,
-    MarketplaceTransaction,
 )
 from app.schemas import (
     Wine as WineSchema,
@@ -59,7 +58,6 @@ from app.schemas import (
     WhiteLabelUpdate,
     WhiteLabelResponse,
     SubscriptionResponse,
-    PaymentMethodResponse,
     InvoiceResponse,
     UsageAlertCreate,
     UsageAlertResponse,
@@ -81,7 +79,6 @@ from app.schemas import (
 )
 from app.payments import (
     Subscription,
-    PaymentMethod,
     Invoice,
     UsageAlert,
     TIER_PRICES,
@@ -90,7 +87,9 @@ from app.payments import (
     create_stripe_portal_session,
     init_stripe,
 )
-from app import models  # Import all models to register them with SQLAlchemy
+
+# Import all models to register them with SQLAlchemy
+from app import models  # noqa: F401
 
 pwd_context = None
 
@@ -135,7 +134,7 @@ async def custom_domain_middleware(request: Request, call_next):
                 db.query(WhiteLabelConfig)
                 .filter(
                     WhiteLabelConfig.custom_domain == host,
-                    WhiteLabelConfig.is_active == True,
+                    WhiteLabelConfig.is_active,
                 )
                 .first()
             )
@@ -2043,9 +2042,6 @@ def get_invoice(
 
 
 # ==================== GraphQL API ====================
-
-from strawberry.fastapi import GraphQLRouter
-from app.graphql import schema
 
 graphql_app = GraphQLRouter(schema)
 

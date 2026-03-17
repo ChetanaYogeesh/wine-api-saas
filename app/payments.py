@@ -1,5 +1,4 @@
 import stripe
-from typing import Optional
 from datetime import datetime
 from sqlalchemy import (
     Column,
@@ -9,7 +8,6 @@ from sqlalchemy import (
     DateTime,
     Boolean,
     ForeignKey,
-    Text,
 )
 from sqlalchemy.orm import relationship
 from app.database import Base

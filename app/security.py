@@ -2,7 +2,7 @@ import re
 import logging
 from typing import Optional, Any
 from datetime import datetime, timezone
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)

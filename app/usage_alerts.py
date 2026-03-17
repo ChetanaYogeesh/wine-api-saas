@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
 from app.models import UsageAlert, User, APIKey, UsageLog
 from app.database import SessionLocal
 from app.email import send_email
@@ -9,7 +8,7 @@ def check_usage_alerts():
     """Check usage and send alerts for users approaching limits"""
     db = SessionLocal()
     try:
-        alerts = db.query(UsageAlert).filter(UsageAlert.is_active == True).all()
+        alerts = db.query(UsageAlert).filter(UsageAlert.is_active).all()
 
         for alert in alerts:
             if alert.last_sent_at:

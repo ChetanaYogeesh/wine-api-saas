@@ -1,6 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from app.models import Wine, WinePreference, WineRecommendation, WinePriceHistory
+from app.models import Wine, WinePreference, WinePriceHistory
 from typing import List, Optional
 import random
 
