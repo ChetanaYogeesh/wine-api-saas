@@ -94,8 +94,88 @@ class Wine(Base):
     variety = Column(String(255), index=True)
     rating = Column(Float)
     notes = Column(Text)
+    country = Column(String(100))
+    vintage = Column(Integer)
+    price = Column(Float)
+    image_url = Column(String(500))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class WinePriceHistory(Base):
+    __tablename__ = "wine_price_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    wine_id = Column(Integer, ForeignKey("wines.id"), nullable=False)
+    price = Column(Float, nullable=False)
+    retailer = Column(String(255))
+    url = Column(String(500))
+    currency = Column(String(3), default="USD")
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class WineRecommendation(Base):
+    __tablename__ = "wine_recommendations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    wine_id = Column(Integer, ForeignKey("wines.id"), nullable=False)
+    score = Column(Float, nullable=False)
+    reason = Column(String(100))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+    wine = relationship("Wine")
+
+
+class WinePreference(Base):
+    __tablename__ = "wine_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    preferred_region = Column(String(255))
+    preferred_variety = Column(String(255))
+    min_rating = Column(Float)
+    max_price = Column(Float)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User")
+
+
+class MarketplaceListing(Base):
+    __tablename__ = "marketplace_listings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    wine_id = Column(Integer, ForeignKey("wines.id"), nullable=False)
+    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    price = Column(Float, nullable=False)
+    quantity = Column(Integer, default=1)
+    condition = Column(String(50))
+    description = Column(Text)
+    status = Column(String(20), default="active")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    wine = relationship("Wine")
+    seller = relationship("User")
+
+
+class MarketplaceTransaction(Base):
+    __tablename__ = "marketplace_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    listing_id = Column(Integer, ForeignKey("marketplace_listings.id"), nullable=False)
+    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    price = Column(Float, nullable=False)
+    quantity = Column(Integer, default=1)
+    status = Column(String(20), default="pending")
+    payment_status = Column(String(20), default="pending")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    listing = relationship("MarketplaceListing")
 
 
 class UsageLog(Base):
@@ -153,8 +233,10 @@ class WhiteLabelConfig(Base):
     logo_url = Column(String(500))
     primary_color = Column(String(7))
     secondary_color = Column(String(7))
-    custom_domain = Column(String(255))
+    custom_domain = Column(String(255), unique=True, index=True)
     email_footer = Column(Text)
+    is_active = Column(Boolean, default=True)
+    ssl_enabled = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

@@ -33,6 +33,132 @@ class WineStats(BaseModel):
     rating_distribution: dict[str, int]
 
 
+class WineRecommendationBase(BaseModel):
+    wine_id: int
+    score: float
+    reason: Optional[str] = None
+
+
+class WineRecommendation(WineRecommendationBase):
+    id: int
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WinePreferenceBase(BaseModel):
+    preferred_region: Optional[str] = None
+    preferred_variety: Optional[str] = None
+    min_rating: Optional[float] = None
+    max_price: Optional[float] = None
+
+
+class WinePreference(WinePreferenceBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class WinePreferenceUpdate(BaseModel):
+    preferred_region: Optional[str] = None
+    preferred_variety: Optional[str] = None
+    min_rating: Optional[float] = None
+    max_price: Optional[float] = None
+
+
+class WinePriceHistoryBase(BaseModel):
+    wine_id: int
+    price: float
+    retailer: Optional[str] = None
+    url: Optional[str] = None
+    currency: Optional[str] = "USD"
+
+
+class WinePriceHistory(WinePriceHistoryBase):
+    id: int
+    recorded_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WinePriceHistoryResponse(BaseModel):
+    wine_id: int
+    current_price: Optional[float] = None
+    price_history: list[WinePriceHistory]
+    price_change_percent: Optional[float] = None
+    lowest_price: Optional[float] = None
+    highest_price: Optional[float] = None
+
+
+class MarketplaceListingBase(BaseModel):
+    wine_id: int
+    price: float
+    quantity: Optional[int] = 1
+    condition: Optional[str] = None
+    description: Optional[str] = None
+
+
+class MarketplaceListingCreate(MarketplaceListingBase):
+    pass
+
+
+class MarketplaceListing(MarketplaceListingBase):
+    id: int
+    seller_id: int
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MarketplaceListingResponse(BaseModel):
+    listings: list[MarketplaceListing]
+    total: int
+    page: int
+    limit: int
+
+
+class MarketplaceTransactionBase(BaseModel):
+    listing_id: int
+    buyer_id: int
+    quantity: Optional[int] = 1
+
+
+class MarketplaceTransactionCreate(MarketplaceTransactionBase):
+    pass
+
+
+class MarketplaceTransaction(MarketplaceTransactionBase):
+    id: int
+    seller_id: int
+    price: float
+    status: str
+    payment_status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class RecommendationRequest(BaseModel):
+    wine_id: Optional[int] = None
+    region: Optional[str] = None
+    variety: Optional[str] = None
+    min_rating: Optional[float] = None
+    max_price: Optional[float] = None
+    limit: Optional[int] = 10
+
+
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
@@ -242,6 +368,7 @@ class WhiteLabelBase(BaseModel):
     secondary_color: Optional[str] = None
     custom_domain: Optional[str] = None
     email_footer: Optional[str] = None
+    is_active: bool = True
 
 
 class WhiteLabelCreate(WhiteLabelBase):
@@ -255,16 +382,24 @@ class WhiteLabelUpdate(BaseModel):
     secondary_color: Optional[str] = None
     custom_domain: Optional[str] = None
     email_footer: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class WhiteLabelResponse(WhiteLabelBase):
     id: int
     user_id: int
+    ssl_enabled: bool
     created_at: datetime
     updated_at: Optional[datetime]
 
     class Config:
         from_attributes = True
+
+
+class CustomDomainVerifyResponse(BaseModel):
+    domain: str
+    verification_status: str
+    dns_records: dict
 
 
 # Payment Schemas

@@ -14,7 +14,7 @@ from jose import JWTError, jwt
 import bcrypt
 from sqlalchemy.orm import Session
 
-from app.database import get_db, settings, engine, Base
+from app.database import get_db, settings, engine, Base, SessionLocal
 from app.models import (
     User,
     Wine,
@@ -26,6 +26,10 @@ from app.models import (
     Team,
     TeamMember,
     WhiteLabelConfig,
+    WinePreference,
+    WinePriceHistory,
+    MarketplaceListing,
+    MarketplaceTransaction,
 )
 from app.schemas import (
     Wine as WineSchema,
@@ -63,6 +67,17 @@ from app.schemas import (
     PortalSessionResponse,
     PricingResponse,
     PricingTierResponse,
+    CustomDomainVerifyResponse,
+    WinePreference,
+    WinePreferenceUpdate,
+    WinePriceHistory,
+    WinePriceHistoryResponse,
+    MarketplaceListing,
+    MarketplaceListingCreate,
+    MarketplaceListingResponse,
+    MarketplaceTransaction,
+    MarketplaceTransactionCreate,
+    RecommendationRequest,
 )
 from app.payments import (
     Subscription,
@@ -105,6 +120,32 @@ async def add_security_headers(request: Request, call_next):
         "max-age=31536000; includeSubDomains"
     )
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+@app.middleware("http")
+async def custom_domain_middleware(request: Request, call_next):
+    """Handle custom domain requests for white-label"""
+    host = request.headers.get("host", "")
+
+    if host and host != settings.allowed_origins.split(",")[0].strip():
+        db = SessionLocal()
+        try:
+            config = (
+                db.query(WhiteLabelConfig)
+                .filter(
+                    WhiteLabelConfig.custom_domain == host,
+                    WhiteLabelConfig.is_active == True,
+                )
+                .first()
+            )
+
+            if config:
+                request.state.white_label_config = config
+        finally:
+            db.close()
+
+    response = await call_next(request)
     return response
 
 
@@ -573,6 +614,356 @@ async def list_varieties(
 
     varieties_cache.set("list", result)
     return result
+
+
+@app.post("/recommendations/ai", response_model=list[dict])
+@limiter.limit("30/minute")
+async def get_ai_recommendations(
+    request: Request,
+    recommendation_request: RecommendationRequest,
+    api_key: APIKey = Depends(verify_api_key),
+    db: Session = Depends(get_db),
+):
+    from app.recommendations import RecommendationService
+
+    service = RecommendationService(db)
+    recommendations = service.get_ai_recommendations(
+        wine_id=recommendation_request.wine_id,
+        region=recommendation_request.region,
+        variety=recommendation_request.variety,
+        min_rating=recommendation_request.min_rating,
+        max_price=recommendation_request.max_price,
+        limit=recommendation_request.limit or 10,
+    )
+
+    return [
+        {
+            "wine": {
+                "id": r["wine"].id,
+                "name": r["wine"].name,
+                "region": r["wine"].region,
+                "variety": r["wine"].variety,
+                "rating": r["wine"].rating,
+                "price": r["wine"].price,
+                "vintage": r["wine"].vintage,
+            },
+            "score": r["score"],
+            "reason": r["reason"],
+        }
+        for r in recommendations
+    ]
+
+
+@app.get("/recommendations/similar/{wine_id}", response_model=list[dict])
+@limiter.limit("30/minute")
+async def get_similar_wines(
+    request: Request,
+    wine_id: int,
+    limit: int = Query(10, ge=1, le=50),
+    api_key: APIKey = Depends(verify_api_key),
+    db: Session = Depends(get_db),
+):
+    from app.recommendations import RecommendationService
+
+    service = RecommendationService(db)
+    wines = service.get_similar_wines(wine_id=wine_id, limit=limit)
+
+    return [
+        {
+            "id": w.id,
+            "name": w.name,
+            "region": w.region,
+            "variety": w.variety,
+            "rating": w.rating,
+            "price": w.price,
+            "vintage": w.vintage,
+        }
+        for w in wines
+    ]
+
+
+@app.post("/preferences", response_model=WinePreference)
+@limiter.limit("30/minute")
+async def set_wine_preferences(
+    request: Request,
+    preferences: WinePreferenceUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.security import validate_rating, validate_price
+
+    update_data = preferences.model_dump(exclude_unset=True)
+
+    if "min_rating" in update_data and update_data["min_rating"] is not None:
+        try:
+            update_data["min_rating"] = validate_rating(update_data["min_rating"])
+        except Exception:
+            update_data["min_rating"] = None
+
+    if "max_price" in update_data and update_data["max_price"] is not None:
+        try:
+            update_data["max_price"] = validate_price(update_data["max_price"])
+        except Exception:
+            update_data["max_price"] = None
+
+    existing = (
+        db.query(WinePreference)
+        .filter(WinePreference.user_id == current_user.id)
+        .first()
+    )
+
+    if existing:
+        for key, value in update_data.items():
+            setattr(existing, key, value)
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    new_preference = WinePreference(user_id=current_user.id, **update_data)
+    db.add(new_preference)
+    db.commit()
+    db.refresh(new_preference)
+    return new_preference
+
+
+@app.get("/preferences", response_model=WinePreference)
+@limiter.limit("30/minute")
+async def get_wine_preferences(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    preference = (
+        db.query(WinePreference)
+        .filter(WinePreference.user_id == current_user.id)
+        .first()
+    )
+    if not preference:
+        raise HTTPException(status_code=404, detail="Preferences not found")
+    return preference
+
+
+@app.get("/wines/{wine_id}/prices", response_model=WinePriceHistoryResponse)
+@limiter.limit("30/minute")
+async def get_wine_price_history(
+    request: Request,
+    wine_id: int,
+    api_key: APIKey = Depends(verify_api_key),
+    db: Session = Depends(get_db),
+):
+    from app.recommendations import PriceTrackingService
+
+    service = PriceTrackingService(db)
+    return service.get_price_history(wine_id)
+
+
+@app.post("/wines/{wine_id}/prices", response_model=WinePriceHistory)
+@limiter.limit("30/minute")
+async def record_wine_price(
+    request: Request,
+    wine_id: int,
+    price: float = Query(...),
+    retailer: Optional[str] = None,
+    url: Optional[str] = None,
+    currency: str = Query("USD"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.recommendations import PriceTrackingService
+    from app.security import validate_price, validate_currency, validate_url
+
+    if wine_id < 1:
+        raise HTTPException(status_code=400, detail="Invalid wine ID")
+
+    wine = db.query(Wine).filter(Wine.id == wine_id).first()
+    if not wine:
+        raise HTTPException(status_code=404, detail="Wine not found")
+
+    try:
+        validated_price = validate_price(price)
+        validated_currency = validate_currency(currency)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid price or currency")
+
+    validated_url = None
+    if url:
+        try:
+            validated_url = validate_url(url)
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    validated_retailer = None
+    if retailer:
+        from app.security import sanitize_string
+
+        validated_retailer = sanitize_string(retailer, max_length=255)
+
+    service = PriceTrackingService(db)
+    return service.record_price(
+        wine_id=wine_id,
+        price=validated_price,
+        retailer=validated_retailer,
+        url=validated_url,
+        currency=validated_currency,
+    )
+
+
+@app.post("/marketplace/listings", response_model=MarketplaceListing)
+@limiter.limit("30/minute")
+async def create_marketplace_listing(
+    request: Request,
+    listing: MarketplaceListingCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.security import (
+        sanitize_text,
+        sanitize_string,
+        validate_price,
+        validate_quantity,
+        log_security_event,
+    )
+
+    wine = db.query(Wine).filter(Wine.id == listing.wine_id).first()
+    if not wine:
+        raise HTTPException(status_code=404, detail="Wine not found")
+
+    try:
+        price = validate_price(listing.price)
+        quantity = validate_quantity(listing.quantity or 1)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    description = sanitize_text(listing.description)
+    condition = sanitize_string(listing.condition, max_length=50)
+
+    if description and len(description) > 5000:
+        raise HTTPException(status_code=400, detail="Description too long")
+
+    new_listing = MarketplaceListing(
+        wine_id=listing.wine_id,
+        seller_id=current_user.id,
+        price=price,
+        quantity=quantity,
+        condition=condition,
+        description=description,
+    )
+    db.add(new_listing)
+    db.commit()
+    db.refresh(new_listing)
+
+    log_security_event(
+        event_type="LISTING_CREATED",
+        user_id=current_user.id,
+        details={"listing_id": new_listing.id, "wine_id": listing.wine_id},
+    )
+
+    return new_listing
+
+
+@app.get("/marketplace/listings", response_model=MarketplaceListingResponse)
+@limiter.limit("60/minute")
+async def list_marketplace_listings(
+    request: Request,
+    wine_id: Optional[int] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    api_key: APIKey = Depends(verify_api_key),
+    db: Session = Depends(get_db),
+):
+    from app.security import validate_limit, validate_offset
+
+    limit = validate_limit(limit)
+    offset = validate_offset((page - 1) * limit)
+
+    query = db.query(MarketplaceListing).filter(MarketplaceListing.status == "active")
+
+    if wine_id and wine_id > 0:
+        query = query.filter(MarketplaceListing.wine_id == wine_id)
+    if min_price is not None and min_price >= 0:
+        query = query.filter(MarketplaceListing.price >= min_price)
+    if max_price is not None and max_price >= 0:
+        query = query.filter(MarketplaceListing.price <= max_price)
+
+    total = query.count()
+    listings = query.offset(offset).limit(limit).all()
+
+    return MarketplaceListingResponse(
+        listings=listings,
+        total=total,
+        page=page,
+        limit=limit,
+    )
+
+
+@app.post("/marketplace/transactions", response_model=MarketplaceTransaction)
+@limiter.limit("30/minute")
+async def create_marketplace_transaction(
+    request: Request,
+    transaction: MarketplaceTransactionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.security import validate_quantity, log_security_event
+
+    if transaction.listing_id < 1:
+        raise HTTPException(status_code=400, detail="Invalid listing ID")
+
+    quantity = validate_quantity(transaction.quantity or 1)
+
+    listing = (
+        db.query(MarketplaceListing)
+        .filter(MarketplaceListing.id == transaction.listing_id)
+        .first()
+    )
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if listing.status != "active":
+        raise HTTPException(status_code=400, detail="Listing is not active")
+    if listing.seller_id == current_user.id:
+        log_security_event(
+            event_type="SELF_PURCHASE_ATTEMPT",
+            user_id=current_user.id,
+            details={"listing_id": listing.id},
+        )
+        raise HTTPException(status_code=400, detail="Cannot purchase your own listing")
+
+    if quantity > listing.quantity:
+        raise HTTPException(
+            status_code=400, detail="Requested quantity exceeds available stock"
+        )
+
+    new_transaction = MarketplaceTransaction(
+        listing_id=transaction.listing_id,
+        buyer_id=current_user.id,
+        seller_id=listing.seller_id,
+        price=listing.price,
+        quantity=quantity,
+    )
+    db.add(new_transaction)
+
+    listing.quantity -= quantity
+    if listing.quantity <= 0:
+        listing.status = "sold"
+
+    db.commit()
+    db.refresh(new_transaction)
+
+    log_security_event(
+        event_type="TRANSACTION_CREATED",
+        user_id=current_user.id,
+        details={
+            "transaction_id": new_transaction.id,
+            "listing_id": listing.id,
+            "quantity": quantity,
+        },
+    )
+
+    return new_transaction
 
 
 @app.get("/usage", response_model=UsageStats)
@@ -1337,6 +1728,64 @@ def delete_white_label_config(
     return {"detail": "White-label config deleted"}
 
 
+@app.get("/white-label/verify-domain", response_model=CustomDomainVerifyResponse)
+def verify_custom_domain(
+    domain: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Verify custom domain ownership via DNS"""
+    import socket
+
+    try:
+        ip_address = socket.gethostbyname(domain)
+    except socket.gaierror:
+        raise HTTPException(
+            status_code=400, detail="Domain does not resolve to any IP address"
+        )
+
+    dns_records = {
+        "TXT": {
+            "name": f"_wineapi.{domain}",
+            "value": f"wineapi-verification={current_user.id}",
+        },
+        "A": {
+            "name": domain,
+            "value": ip_address,
+        },
+    }
+
+    return CustomDomainVerifyResponse(
+        domain=domain,
+        verification_status="pending",
+        dns_records=dns_records,
+    )
+
+
+@app.post("/white-label/domain/status")
+def check_domain_status(
+    domain: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Check if custom domain is properly configured"""
+    config = (
+        db.query(WhiteLabelConfig)
+        .filter(WhiteLabelConfig.custom_domain == domain)
+        .first()
+    )
+
+    if not config or config.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Domain not found for this user")
+
+    return {
+        "domain": domain,
+        "is_active": config.is_active,
+        "ssl_enabled": config.ssl_enabled,
+        "status": "active" if config.is_active else "inactive",
+    }
+
+
 # ==================== Payment & Subscription Endpoints ====================
 
 
@@ -1591,3 +2040,13 @@ def get_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return invoice
+
+
+# ==================== GraphQL API ====================
+
+from strawberry.fastapi import GraphQLRouter
+from app.graphql import schema
+
+graphql_app = GraphQLRouter(schema)
+
+app.include_router(graphql_app, prefix="/graphql")

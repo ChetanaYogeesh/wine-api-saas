@@ -173,19 +173,19 @@
 ## 8. Future Roadmap
 
 ### Phase 2 (Q2 2026)
-- [ ] Stripe payment integration
-- [ ] Usage alert notifications
-- [ ] API playground / sandbox
+- [x] Stripe payment integration
+- [x] Usage alert notifications
+- [x] API playground / sandbox
 
 ### Phase 3 (Q3 2026)
-- [ ] GraphQL API
-- [ ] Mobile SDKs (iOS, Android)
-- [ ] Custom domain support
+- [x] GraphQL API
+- [x] Mobile SDKs (iOS, Android)
+- [x] Custom domain support
 
 ### Phase 4 (Q4 2026)
-- [ ] Wine recommendation AI
-- [ ] Price tracking
-- [ ] Marketplace integration
+- [x] Wine recommendation AI
+- [x] Price tracking
+- [x] Marketplace integration
 
 ---
 

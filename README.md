@@ -21,6 +21,14 @@ A production-ready Wine API platform with 32,780 wine records, built with FastAP
 - **Analytics** - Detailed usage dashboards, JSON/CSV export
 - **Team Management** - Multi-user teams with roles
 - **White-label** - Custom branding and colors
+- **GraphQL API** - Alternative GraphQL interface
+- **Mobile SDKs** - Python, JavaScript, Swift, Kotlin SDKs
+- **Custom Domain** - White-label with custom domains
+
+### Phase 4 Features
+- **AI Recommendations** - Smart wine recommendations based on preferences
+- **Price Tracking** - Track wine prices over time from multiple retailers
+- **Marketplace** - Buy and sell wines through the platform
 
 ## Tech Stack
 
@@ -90,8 +98,25 @@ npm run dev
 | GET | `/wines/search` | Search wines |
 | GET | `/wines/top-rated` | Top rated wines |
 | GET | `/wines/stats` | Wine statistics |
+| GET | `/wines/{id}/prices` | Get price history |
+| POST | `/wines/{id}/prices` | Record price |
 | GET | `/regions` | List regions |
 | GET | `/varieties` | List varieties |
+
+### Recommendations & Preferences
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/recommendations/ai` | AI-powered recommendations |
+| GET | `/recommendations/similar/{id}` | Similar wines |
+| POST | `/preferences` | Set wine preferences |
+| GET | `/preferences` | Get wine preferences |
+
+### Marketplace
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/marketplace/listings` | Create listing |
+| GET | `/marketplace/listings` | List listings |
+| POST | `/marketplace/transactions` | Purchase wine |
 
 ### User Features
 | Method | Endpoint | Description |
@@ -106,6 +131,7 @@ npm run dev
 | CRUD | `/webhooks/*` | Webhook management |
 | CRUD | `/teams/*` | Team management |
 | CRUD | `/white-label` | White-label config |
+| GET | `/graphql` | GraphQL API |
 
 ## API Key Usage
 
