@@ -82,7 +82,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
@@ -106,11 +106,16 @@ jobs:
     environment: staging
     
     steps:
-      - name: Deploy to Staging
+      - name: Deploy to Staging (Railway)
         run: |
-          echo "Deploying to staging..."
-          # Add Railway/Render deployment commands here
-          # railway deploy --project=your-project
+          echo "Deploying to staging via Railway..."
+          # Install Railway CLI
+          npm install -g @railway/cli
+          railway login --token ${{ secrets.RAILWAY_TOKEN }}
+          railway deploy --project=${{ secrets.RAILWAY_PROJECT_STAGING }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_STAGING: ${{ secrets.RAILWAY_PROJECT_STAGING }}
 
   deploy-production:
     runs-on: ubuntu-latest
@@ -119,8 +124,19 @@ jobs:
     environment: production
     
     steps:
-      - name: Deploy to Production
+      - name: Deploy to Production (Railway)
         run: |
-          echo "Deploying to production..."
-          # Add Railway/Render deployment commands here
-          # railway deploy --project=your-project
+          echo "Deploying to production via Railway..."
+          # Install Railway CLI
+          npm install -g @railway/cli
+          railway login --token ${{ secrets.RAILWAY_TOKEN }}
+          railway deploy --project=${{ secrets.RAILWAY_PROJECT_PROD }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_PROD: ${{ secrets.RAILWAY_PROJECT_PROD }}
+
+      - name: Notify Production Deploy
+        if: success()
+        run: |
+          echo "Production deployment successful!"
+          echo "Image: ${{ steps.meta.outputs.tags }}"

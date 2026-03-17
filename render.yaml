@@ -1,0 +1,22 @@
+{
+  "name": "wine-api",
+  "region": "oregon",
+  "envVars": [
+    {
+      "key": "DATABASE_URL",
+      "value": "postgres://postgres:postgres@wineapi-db:5432/wineapi"
+    },
+    {
+      "key": "REDIS_URL",
+      "value": "redis://wineapi-redis:6379/0"
+    }
+  ],
+  "services": [
+    {
+      "name": "wine-api",
+      "githubRepo": "ChetanaYogeesh/wine-api-saas",
+      "buildCommand": "pip install -r requirements.txt",
+      "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    }
+  ]
+}
