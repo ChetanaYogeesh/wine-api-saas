@@ -78,6 +78,8 @@ class APIKeyResponse(APIKeyBase):
     key: str
     user_id: int
     is_active: bool
+    rate_limit: int
+    monthly_limit: int
     created_at: datetime
     expires_at: Optional[datetime] = None
 

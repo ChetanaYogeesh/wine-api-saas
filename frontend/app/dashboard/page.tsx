@@ -81,8 +81,21 @@ export default function DashboardPage() {
     router.push('/');
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      alert('Copied to clipboard!');
+    }
   };
 
   if (loading) {
@@ -201,9 +214,9 @@ export default function DashboardPage() {
                           </button>
                         </div>
                       </td>
-                      <td>{key.rate_limit}/min</td>
-                      <td>{key.monthly_limit.toLocaleString()}</td>
-                      <td>{new Date(key.created_at).toLocaleDateString()}</td>
+                      <td>{key.rate_limit ?? 0}/min</td>
+                      <td>{(key.monthly_limit ?? 0).toLocaleString()}</td>
+                      <td>{key.created_at ? new Date(key.created_at).toLocaleDateString() : 'N/A'}</td>
                     </tr>
                   ))}
                 </tbody>

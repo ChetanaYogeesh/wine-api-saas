@@ -139,3 +139,65 @@ Removed redundant files (merged into above):
 - `tests/conftest.py` - Complete rewrite for SQLite testing
 - `tests/test_api.py` - Removed unused pytest import
 - `.github/workflows/ci-cd.yml` - Removed DB services, added Node.js 24 opt-in
+
+### Fix 5: Frontend Dashboard Error
+
+**Issue:** Dashboard showed `Cannot read properties of undefined (reading 'toLocaleString')` error for API keys.
+
+**Root Cause:** The `APIKeyResponse` schema in `app/schemas.py` was missing `rate_limit` and `monthly_limit` fields, even though the database model had them.
+
+**Solution:** Added missing fields to `APIKeyResponse`:
+```python
+class APIKeyResponse(APIKeyBase):
+    id: int
+    key: str
+    user_id: int
+    is_active: bool
+    rate_limit: int        # Added
+    monthly_limit: int     # Added
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+```
+
+**Files Modified:**
+- `app/schemas.py` - Added rate_limit and monthly_limit to APIKeyResponse
+
+### Fix 6: Frontend Defensive Coding
+
+**Issue:** Dashboard still showed errors when API didn't return the new fields (before restart).
+
+**Solution:** Added defensive coding in `frontend/app/dashboard/page.tsx` to handle missing data:
+```tsx
+<td>{key.rate_limit ?? 0}/min</td>
+<td>{(key.monthly_limit ?? 0).toLocaleString()}</td>
+<td>{key.created_at ? new Date(key.created_at).toLocaleDateString() : 'N/A'}</td>
+```
+
+**Files Modified:**
+- `frontend/app/dashboard/page.tsx` - Added nullish coalescing for safe rendering
+
+### Fix 7: Copy Button Not Working
+
+**Issue:** Copy to clipboard button didn't provide feedback and failed silently.
+
+**Solution:** Improved the copy function with error handling and fallback:
+```tsx
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('Copied to clipboard!');
+  } catch (err) {
+    // Fallback for older browsers
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    alert('Copied to clipboard!');
+  }
+};
+```
+
+**Files Modified:**
+- `frontend/app/dashboard/page.tsx` - Enhanced copyToClipboard function
