@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Chatbot from './components/Chatbot';
 import './globals.css';
 
 export default function Home() {
@@ -116,6 +117,8 @@ export default function Home() {
           <p>&copy; 2026 Wine API. Built with FastAPI.</p>
         </div>
       </footer>
+
+      <Chatbot />
     </>
   );
 }
