@@ -38,7 +38,12 @@ export default function Chatbot() {
     }
   }, [isOpen]);
 
+  const isLoggedIn = typeof window !== 'undefined' && localStorage.getItem('token');
+
   const loadApiKeys = async () => {
+    if (!isLoggedIn) {
+      return;
+    }
     try {
       const keys = await apiKeys.list();
       setApiKeyList(keys);
@@ -237,7 +242,7 @@ export default function Chatbot() {
             <div style={{ fontSize: '12px', opacity: 0.9 }}>Powered by local LLM</div>
           </div>
 
-          {apiKeyList.length > 0 && (
+          {apiKeyList.length > 0 ? (
             <div style={{ padding: '8px 12px', backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
               <select
                 value={selectedKey}
@@ -250,6 +255,10 @@ export default function Chatbot() {
                   </option>
                 ))}
               </select>
+            </div>
+          ) : (
+            <div style={{ padding: '12px', backgroundColor: '#fef3c7', borderBottom: '1px solid #fcd34d', fontSize: '12px', color: '#92400e' }}>
+              {isLoggedIn ? 'No API keys found. Create one in the dashboard.' : 'Please log in to use the chat.'}
             </div>
           )}
 
@@ -277,14 +286,14 @@ export default function Chatbot() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about wines..."
-                style={styles.input}
-                disabled={isLoading}
+                placeholder={isLoggedIn && selectedKey ? "Ask about wines..." : "Log in to chat"}
+                style={{ ...styles.input, backgroundColor: (!isLoggedIn || !selectedKey) ? '#f3f4f6' : 'white' }}
+                disabled={isLoading || !selectedKey}
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isLoading}
-                style={{ ...styles.sendButton, opacity: !input.trim() || isLoading ? 0.5 : 1 }}
+                disabled={!input.trim() || isLoading || !selectedKey}
+                style={{ ...styles.sendButton, opacity: (!input.trim() || isLoading || !selectedKey) ? 0.5 : 1 }}
               >
                 <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
