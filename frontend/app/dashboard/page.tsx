@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiKeys, usage, tiers, setRouter } from '../../lib/api';
+import Chatbot from '../components/Chatbot';
 
 interface APIKey {
   id: number;
@@ -239,6 +240,8 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <Chatbot />
     </div>
   );
 }
