@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '../../lib/api';
 
+function sanitizeInput(input: string): string {
+  return input.trim();
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -15,14 +19,27 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const sanitizedEmail = sanitizeInput(email);
+
+    if (!sanitizedEmail || !password) {
+      setError('Please enter both email and password');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const data = await auth.login(email, password);
-      localStorage.setItem('token', data.access_token);
-      router.push('/dashboard');
+      const data = await auth.login(sanitizedEmail, password);
+      if (data.access_token) {
+        localStorage.setItem('token', data.access_token);
+        router.push('/dashboard');
+      } else {
+        setError('Login failed. Please try again.');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Invalid credentials');
+      const errorMessage = err.response?.data?.detail || 'Invalid email or password';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -44,6 +61,8 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              maxLength={254}
+              autoComplete="email"
             />
           </div>
           
@@ -55,6 +74,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
             />
           </div>
           

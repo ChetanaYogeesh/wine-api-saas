@@ -5,6 +5,25 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '../../lib/api';
 
+function sanitizeInput(input: string): string {
+  return input.trim().replace(/[<>]/g, '');
+}
+
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+function validatePassword(password: string): string | null {
+  if (password.length < 6) {
+    return 'Password must be at least 6 characters';
+  }
+  if (password.length > 128) {
+    return 'Password must be less than 128 characters';
+  }
+  return null;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -16,15 +35,40 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const sanitizedEmail = sanitizeInput(email);
+    const sanitizedName = sanitizeInput(fullName);
+
+    if (!validateEmail(sanitizedEmail)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
+
+    if (sanitizedName.length < 1 || sanitizedName.length > 100) {
+      setError('Name must be between 1 and 100 characters');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await auth.register(email, password, fullName);
-      const data = await auth.login(email, password);
-      localStorage.setItem('token', data.access_token);
-      router.push('/dashboard');
+      await auth.register(sanitizedEmail, password, sanitizedName);
+      const data = await auth.login(sanitizedEmail, password);
+      if (data.access_token) {
+        localStorage.setItem('token', data.access_token);
+        router.push('/dashboard');
+      } else {
+        setError('Registration successful but login failed. Please login manually.');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      const errorMessage = err.response?.data?.detail || 'Registration failed. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -46,6 +90,9 @@ export default function RegisterPage() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
+              maxLength={100}
+              pattern="^[a-zA-Z\s]+$"
+              title="Only letters and spaces allowed"
             />
           </div>
           
@@ -57,6 +104,7 @@ export default function RegisterPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              maxLength={254}
             />
           </div>
           
@@ -69,6 +117,8 @@ export default function RegisterPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
+              maxLength={128}
+              autoComplete="new-password"
             />
           </div>
           

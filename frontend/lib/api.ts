@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { useRouter } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -7,7 +8,14 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000,
 });
+
+let routerInstance: any = null;
+
+export const setRouter = (router: any) => {
+  routerInstance = router;
+};
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -17,7 +25,26 @@ api.interceptors.request.use((config) => {
     }
   }
   return config;
+}, (error) => {
+  return Promise.reject(error);
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        if (routerInstance) {
+          routerInstance.push('/login');
+        } else {
+          window.location.href = '/login';
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const auth = {
   register: async (email: string, password: string, fullName: string) => {

@@ -1091,3 +1091,68 @@ Add advanced features: webhooks, analytics, teams, white-label
 ```
 ghcr.io/chetanayogeesh/wine-api-saas:latest
 ```
+
+---
+
+# Session Log: March 16, 2026
+
+**Goal:** Fix failing tests, update CI, add security improvements
+
+---
+
+## Test Fixes
+
+### Issue: 15 Tests Failing
+**Problem:** Tests tried to connect to `wineapi_test` database which didn't exist.
+
+**Solution:** Use SQLite in-memory database for tests by setting `DATABASE_URL` in a session-scoped autouse fixture before importing app modules.
+
+### Issue: Dashboard Error - toLocaleString
+**Problem:** `Cannot read properties of undefined (reading 'toLocaleString')` on API keys.
+
+**Cause:** `APIKeyResponse` schema missing `rate_limit` and `monthly_limit` fields.
+
+**Fix:** Added fields to schema in `app/schemas.py`.
+
+### Issue: Copy Button Not Working
+**Problem:** Copy to clipboard failed silently.
+
+**Fix:** Added error handling, fallback, and alert confirmation.
+
+---
+
+## CI/CD Updates
+
+- Removed PostgreSQL/Redis services from CI (tests use SQLite)
+- Added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` for Node.js 24 compatibility
+- Fixed duplicate env section error
+
+---
+
+## Security Improvements
+
+### Frontend
+- Input sanitization (`sanitizeInput()`)
+- Email validation (`validateEmail()`)
+- Password validation (6-128 chars)
+- MaxLength and pattern constraints
+- Auto-complete attributes
+
+### API
+- Security headers: X-Content-Type-Options, X-Frame-Options, HSTS, Referrer-Policy
+- CORS hardening: limited methods/headers
+- Rate limit response includes Retry-After header
+- Token expiration handling in frontend (401 interceptor)
+
+---
+
+## Files Modified
+
+- `tests/conftest.py` - SQLite test setup
+- `app/schemas.py` - APIKeyResponse fields
+- `app/main.py` - Security headers, CORS, rate limits
+- `frontend/app/register/page.tsx` - Input validation
+- `frontend/app/login/page.tsx` - Input validation
+- `frontend/app/dashboard/page.tsx` - Defensive coding, copy button
+- `frontend/lib/api.ts` - 401 interceptor, timeout
+- `.github/workflows/ci-cd.yml` - Removed DB services, Node.js 24

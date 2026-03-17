@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiKeys, usage, tiers } from '../../lib/api';
+import { apiKeys, usage, tiers, setRouter } from '../../lib/api';
 
 interface APIKey {
   id: number;
@@ -27,6 +27,8 @@ interface UsageStats {
 
 export default function DashboardPage() {
   const router = useRouter();
+  setRouter(router);
+  
   const [apiKeyList, setApiKeyList] = useState<APIKey[]>([]);
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [tierList, setTierList] = useState<any[]>([]);
