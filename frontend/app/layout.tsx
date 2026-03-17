@@ -1,6 +1,5 @@
-import './globals.css';
 import type { Metadata } from 'next';
-import ChatbotWrapper from './components/ChatbotWrapper';
+import ClientLayout from './components/ClientLayout';
 
 export const metadata: Metadata = {
   title: 'Wine API - Wine Data as a Service',
@@ -15,8 +14,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        {children}
-        <ChatbotWrapper />
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );
