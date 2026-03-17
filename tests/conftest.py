@@ -71,6 +71,7 @@ def test_engine():
     from sqlalchemy.orm import sessionmaker
     from app.database import Base
     from app.models import User, APIKey, Wine
+    from app.payments import Subscription, PaymentMethod, Invoice, UsageAlert
 
     engine = create_engine(
         os.environ["DATABASE_URL"], connect_args={"check_same_thread": False}

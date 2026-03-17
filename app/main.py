@@ -54,7 +54,28 @@ from app.schemas import (
     WhiteLabelCreate,
     WhiteLabelUpdate,
     WhiteLabelResponse,
+    SubscriptionResponse,
+    PaymentMethodResponse,
+    InvoiceResponse,
+    UsageAlertCreate,
+    UsageAlertResponse,
+    CheckoutSessionResponse,
+    PortalSessionResponse,
+    PricingResponse,
+    PricingTierResponse,
 )
+from app.payments import (
+    Subscription,
+    PaymentMethod,
+    Invoice,
+    UsageAlert,
+    TIER_PRICES,
+    create_stripe_customer,
+    create_stripe_checkout_session,
+    create_stripe_portal_session,
+    init_stripe,
+)
+from app import models  # Import all models to register them with SQLAlchemy
 
 pwd_context = None
 
@@ -1314,3 +1335,259 @@ def delete_white_label_config(
     db.delete(config)
     db.commit()
     return {"detail": "White-label config deleted"}
+
+
+# ==================== Payment & Subscription Endpoints ====================
+
+
+@app.get("/pricing", response_model=PricingResponse)
+def get_pricing():
+    """Get pricing information"""
+    tiers = []
+    for tier_name, tier_info in TIER_PRICES.items():
+        tiers.append(
+            PricingTierResponse(
+                tier=tier_name,
+                price=tier_info["price"],
+                monthly_requests=tier_info["monthly_requests"],
+                rate_limit=tier_info["rate_limit"],
+                features=_get_tier_features(tier_name),
+            )
+        )
+    return PricingResponse(tiers=tiers, current_tier="free")
+
+
+def _get_tier_features(tier: str) -> list[str]:
+    features = {
+        "free": [
+            "1,000 API requests/month",
+            "60 requests/minute",
+            "Basic support",
+        ],
+        "pro": [
+            "50,000 API requests/month",
+            "300 requests/minute",
+            "Priority support",
+            "Analytics dashboard",
+        ],
+        "enterprise": [
+            "1,000,000 API requests/month",
+            "1,000 requests/minute",
+            "Dedicated support",
+            "Custom rate limits",
+            "Team management",
+            "White-label",
+        ],
+    }
+    return features.get(tier, [])
+
+
+@app.post("/subscription/checkout", response_model=CheckoutSessionResponse)
+def create_checkout_session(
+    tier: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Create Stripe checkout session for subscription upgrade"""
+    if tier not in TIER_PRICES:
+        raise HTTPException(status_code=400, detail="Invalid tier")
+
+    tier_info = TIER_PRICES[tier]
+    if not tier_info["price_id"]:
+        raise HTTPException(status_code=400, detail="Free tier cannot be purchased")
+
+    init_stripe(settings.stripe_api_key)
+
+    subscription = (
+        db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
+    )
+
+    if not subscription or not subscription.stripe_customer_id:
+        customer = create_stripe_customer(
+            current_user.email, current_user.full_name or ""
+        )
+        if not subscription:
+            subscription = Subscription(user_id=current_user.id)
+            db.add(subscription)
+        subscription.stripe_customer_id = customer.id
+        db.commit()
+
+    base_url = settings.allowed_origins.split(",")[0].strip()
+    session = create_stripe_checkout_session(
+        customer_id=subscription.stripe_customer_id,
+        price_id=tier_info["price_id"],
+        success_url=f"{base_url}/dashboard?upgrade=success",
+        cancel_url=f"{base_url}/dashboard?upgrade=cancelled",
+    )
+
+    return CheckoutSessionResponse(
+        checkout_url=session.url,
+        session_id=session.id,
+    )
+
+
+@app.post("/subscription/portal", response_model=PortalSessionResponse)
+def create_portal_session(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Create Stripe customer portal session"""
+    init_stripe(settings.stripe_api_key)
+
+    subscription = (
+        db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
+    )
+
+    if not subscription or not subscription.stripe_customer_id:
+        raise HTTPException(status_code=404, detail="No subscription found")
+
+    base_url = settings.allowed_origins.split(",")[0].strip()
+    portal_session = create_stripe_portal_session(
+        customer_id=subscription.stripe_customer_id,
+        return_url=f"{base_url}/dashboard",
+    )
+
+    return PortalSessionResponse(portal_url=portal_session.url)
+
+
+@app.get("/subscription", response_model=SubscriptionResponse)
+def get_subscription(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Get current subscription info"""
+    subscription = (
+        db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
+    )
+
+    if not subscription:
+        subscription = Subscription(
+            user_id=current_user.id, tier="free", status="inactive"
+        )
+        db.add(subscription)
+        db.commit()
+        db.refresh(subscription)
+
+    return subscription
+
+
+@app.post("/subscription/cancel")
+def cancel_subscription(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Cancel subscription at period end"""
+    init_stripe(settings.stripe_api_key)
+
+    subscription = (
+        db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
+    )
+
+    if not subscription or not subscription.stripe_subscription_id:
+        raise HTTPException(status_code=404, detail="No active subscription")
+
+    from app.payments import cancel_stripe_subscription
+
+    cancel_stripe_subscription(subscription.stripe_subscription_id)
+
+    subscription.cancel_at_period_end = True
+    db.commit()
+
+    return {"detail": "Subscription will be cancelled at period end"}
+
+
+# ==================== Usage Alerts Endpoints ====================
+
+
+@app.get("/usage/alerts", response_model=list[UsageAlertResponse])
+def list_usage_alerts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """List usage alerts"""
+    alerts = db.query(UsageAlert).filter(UsageAlert.user_id == current_user.id).all()
+    return alerts
+
+
+@app.post("/usage/alerts", response_model=UsageAlertResponse)
+def create_usage_alert(
+    alert: UsageAlertCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Create a usage alert"""
+    existing_alert = (
+        db.query(UsageAlert)
+        .filter(
+            UsageAlert.user_id == current_user.id,
+            UsageAlert.threshold_percent == alert.threshold_percent,
+        )
+        .first()
+    )
+    if existing_alert:
+        raise HTTPException(
+            status_code=400, detail="Alert for this threshold already exists"
+        )
+
+    new_alert = UsageAlert(
+        user_id=current_user.id, threshold_percent=alert.threshold_percent
+    )
+    db.add(new_alert)
+    db.commit()
+    db.refresh(new_alert)
+    return new_alert
+
+
+@app.delete("/usage/alerts/{alert_id}")
+def delete_usage_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Delete a usage alert"""
+    alert = (
+        db.query(UsageAlert)
+        .filter(UsageAlert.id == alert_id, UsageAlert.user_id == current_user.id)
+        .first()
+    )
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    db.delete(alert)
+    db.commit()
+    return {"detail": "Alert deleted"}
+
+
+# ==================== Invoice Endpoints ====================
+
+
+@app.get("/invoices", response_model=list[InvoiceResponse])
+def list_invoices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """List user invoices"""
+    invoices = (
+        db.query(Invoice)
+        .filter(Invoice.user_id == current_user.id)
+        .order_by(Invoice.created_at.desc())
+        .all()
+    )
+    return invoices
+
+
+@app.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
+def get_invoice(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token),
+):
+    """Get invoice details"""
+    invoice = (
+        db.query(Invoice)
+        .filter(Invoice.id == invoice_id, Invoice.user_id == current_user.id)
+        .first()
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice

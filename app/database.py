@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-to-a-random-secret-key"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    stripe_api_key: str = ""
+    stripe_webhook_secret: str = ""
 
     class Config:
         env_file = ".env"

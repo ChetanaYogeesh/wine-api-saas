@@ -28,6 +28,10 @@ class User(Base):
     api_keys = relationship("APIKey", back_populates="user")
     usage_logs = relationship("UsageLog", back_populates="user")
     webhooks = relationship("Webhook", back_populates="user")
+    subscription = relationship("Subscription", back_populates="user", uselist=False)
+    payment_methods = relationship("PaymentMethod", back_populates="user")
+    invoices = relationship("Invoice", back_populates="user")
+    usage_alerts = relationship("UsageAlert", back_populates="user")
 
 
 class Team(Base):

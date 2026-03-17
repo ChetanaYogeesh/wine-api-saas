@@ -265,3 +265,100 @@ class WhiteLabelResponse(WhiteLabelBase):
 
     class Config:
         from_attributes = True
+
+
+# Payment Schemas
+class SubscriptionBase(BaseModel):
+    tier: str = "free"
+
+
+class SubscriptionCreate(SubscriptionBase):
+    pass
+
+
+class SubscriptionResponse(SubscriptionBase):
+    id: int
+    user_id: int
+    stripe_customer_id: Optional[str]
+    stripe_subscription_id: Optional[str]
+    status: str
+    current_period_start: Optional[datetime]
+    current_period_end: Optional[datetime]
+    cancel_at_period_end: bool
+
+    class Config:
+        from_attributes = True
+
+
+class PaymentMethodBase(BaseModel):
+    is_default: bool = False
+
+
+class PaymentMethodResponse(PaymentMethodBase):
+    id: int
+    user_id: int
+    stripe_payment_method_id: str
+    brand: Optional[str]
+    last4: Optional[str]
+    exp_month: Optional[int]
+    exp_year: Optional[int]
+
+    class Config:
+        from_attributes = True
+
+
+class InvoiceResponse(BaseModel):
+    id: int
+    user_id: int
+    stripe_invoice_id: str
+    amount: float
+    currency: str
+    status: str
+    invoice_pdf: Optional[str]
+    invoice_url: Optional[str]
+    period_start: Optional[datetime]
+    period_end: Optional[datetime]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UsageAlertBase(BaseModel):
+    threshold_percent: int = 80
+
+
+class UsageAlertCreate(UsageAlertBase):
+    pass
+
+
+class UsageAlertResponse(UsageAlertBase):
+    id: int
+    user_id: int
+    last_sent_at: Optional[datetime]
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class CheckoutSessionResponse(BaseModel):
+    checkout_url: str
+    session_id: str
+
+
+class PortalSessionResponse(BaseModel):
+    portal_url: str
+
+
+class PricingTierResponse(BaseModel):
+    tier: str
+    price: float
+    monthly_requests: int
+    rate_limit: int
+    features: list[str]
+
+
+class PricingResponse(BaseModel):
+    tiers: list[PricingTierResponse]
+    current_tier: str
