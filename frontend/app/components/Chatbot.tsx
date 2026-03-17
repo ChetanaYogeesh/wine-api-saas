@@ -7,20 +7,7 @@ interface Message {
   content: string;
 }
 
-const WINE_KNOWLEDGE = {
-  'red wine': 'Red wines are made from dark-colored grape varieties. Popular varieties include Cabernet Sauvignon, Merlot, Pinot Noir, and Syrah.',
-  'white wine': 'White wines are made from green or yellowish grapes. Popular varieties include Chardonnay, Sauvignon Blanc, Riesling, and Pinot Grigio.',
-  'rosé': 'Rosé wine has a pink color from brief contact with grape skins. It is typically crisp and refreshing.',
-  'sparkling': 'Sparkling wines include Champagne, Prosecco, and Cava. They are known for their bubbles.',
-  'region': 'Wine regions include Bordeaux, Burgundy, Napa Valley, Tuscany, and many more. Each region has unique terroir that affects wine flavor.',
-  'variety': 'Wine varieties (grapes) include Cabernet Sauvignon, Merlot, Pinot Noir, Chardonnay, Sauvignon Blanc, and Riesling.',
-  'vintage': 'A vintage year indicates when the grapes were harvested. Older isn\'t always better - it depends on the wine and storage conditions.',
-  'rating': 'Wine ratings typically use a 100-point scale or 5-star system. Wines rated 90+ are considered excellent.',
-  'pairing': 'General wine pairing: red meat → Cabernet Sauvignon, fish → Chardonnay, cheese → Merlot, dessert → Sauternes.',
-  'api': 'Our Wine API provides access to 32,780+ wines. Use /wines endpoint for search, /wines/stats for statistics.',
-  'authentication': 'Authenticate using X-API-Key header. Get your API key from the dashboard.',
-  'rate limit': 'Rate limits: Free (60/min), Pro (300/min), Enterprise (1000/min).',
-};
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -29,34 +16,32 @@ export default function Chatbot() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const getResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase();
-    
-    for (const [key, response] of Object.entries(WINE_KNOWLEDGE)) {
-      if (input.includes(key)) {
-        return response;
-      }
+  const callOllama = async (userMessage: string) => {
+    const conversation = [
+      ...messages,
+      { role: 'user' as const, content: userMessage }
+    ];
+
+    const response = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: conversation }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Failed to get response');
     }
 
-    if (input.includes('help')) {
-      return 'I can help with:\n• Wine types and varieties\n• Food pairing suggestions\n• API authentication\n• Rate limits and pricing\n• Wine regions\n\nWhat would you like to know?';
-    }
-
-    if (input.includes('hello') || input.includes('hi')) {
-      return 'Hello! How can I help you today?';
-    }
-
-    if (input.includes('thank')) {
-      return 'You\'re welcome! Feel free to ask more questions.';
-    }
-
-    return 'I\'m not sure about that. Try asking about wines, API authentication, or rate limits. You can also type "help" for suggestions.';
+    const data = await response.json();
+    return data.message.content;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,12 +52,29 @@ export default function Chatbot() {
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
+    setError(null);
 
-    setTimeout(() => {
-      const response = getResponse(userMessage);
+    try {
+      const response = await callOllama(userMessage);
       setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
+      
+      if (errorMessage.includes('Cannot connect')) {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: 'I\'m having trouble connecting to the AI. Make sure Ollama is running:\n\n`ollama serve`\n\nThen try again.' 
+        }]);
+      } else {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: 'Sorry, I encountered an error. Please try again.' 
+        }]);
+      }
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   return (
@@ -97,7 +99,7 @@ export default function Chatbot() {
         <div className="fixed bottom-24 right-6 w-80 h-[500px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden border border-gray-200">
           <div className="bg-gradient-to-r from-purple-600 to-indigo-700 p-4 text-white">
             <h3 className="font-semibold text-lg">Wine API Assistant</h3>
-            <p className="text-purple-100 text-sm">Ask me anything about wines or the API</p>
+            <p className="text-purple-100 text-sm">Powered by local LLM</p>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
@@ -131,13 +133,19 @@ export default function Chatbot() {
             <div ref={messagesEndRef} />
           </div>
 
+          {error && (
+            <div className="mx-4 mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-600 text-xs">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="p-3 border-t bg-white">
             <div className="flex gap-2">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Type your message..."
+                placeholder="Ask about wines..."
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 disabled={isLoading}
               />

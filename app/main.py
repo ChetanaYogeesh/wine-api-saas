@@ -9,8 +9,7 @@ from fastapi.security import (
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from app.security import ValidationError
-from strawberry.fastapi import GraphQLRouter
-from app.graphql import schema
+from app.chat import router as chat_router
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from jose import JWTError, jwt
@@ -2043,6 +2042,11 @@ def get_invoice(
 
 # ==================== GraphQL API ====================
 
+from strawberry.fastapi import GraphQLRouter  # noqa: E402
+from app.graphql import schema  # noqa: E402
+
 graphql_app = GraphQLRouter(schema)
 
 app.include_router(graphql_app, prefix="/graphql")
+
+app.include_router(chat_router, prefix="/chat", tags=["chat"])
