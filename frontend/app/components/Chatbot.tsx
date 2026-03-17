@@ -111,37 +111,138 @@ export default function Chatbot() {
     }
   };
 
+  const styles: Record<string, React.CSSProperties> = {
+    container: {
+      position: 'fixed',
+      bottom: '24px',
+      right: '24px',
+      zIndex: 9999,
+    },
+    button: {
+      width: '56px',
+      height: '56px',
+      borderRadius: '50%',
+      background: 'linear-gradient(135deg, #9333ea, #4f46e5)',
+      border: 'none',
+      color: 'white',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: '0 10px 25px -3px rgba(0, 0, 0, 0.3)',
+    },
+    chatWindow: {
+      position: 'fixed',
+      bottom: '100px',
+      right: '24px',
+      width: '340px',
+      height: '480px',
+      backgroundColor: 'white',
+      borderRadius: '16px',
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      border: '1px solid #e5e7eb',
+    },
+    header: {
+      background: 'linear-gradient(135deg, #9333ea, #4f46e5)',
+      padding: '16px',
+      color: 'white',
+    },
+    select: {
+      width: '100%',
+      padding: '8px',
+      fontSize: '12px',
+      border: '1px solid #d1d5db',
+      borderRadius: '4px',
+      backgroundColor: 'white',
+    },
+    messagesArea: {
+      flex: 1,
+      overflowY: 'auto',
+      padding: '16px',
+      backgroundColor: '#f9fafb',
+    },
+    userMessage: {
+      backgroundColor: '#9333ea',
+      color: 'white',
+      padding: '8px 12px',
+      borderRadius: '12px 12px 4px 12px',
+      maxWidth: '80%',
+      marginLeft: 'auto',
+      marginBottom: '8px',
+      fontSize: '14px',
+    },
+    assistantMessage: {
+      backgroundColor: 'white',
+      border: '1px solid #e5e7eb',
+      color: '#374151',
+      padding: '8px 12px',
+      borderRadius: '12px 12px 12px 4px',
+      maxWidth: '80%',
+      marginRight: 'auto',
+      marginBottom: '8px',
+      fontSize: '14px',
+      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+    },
+    inputArea: {
+      padding: '12px',
+      borderTop: '1px solid #e5e7eb',
+      backgroundColor: 'white',
+    },
+    input: {
+      flex: 1,
+      padding: '8px 16px',
+      border: '1px solid #d1d5db',
+      borderRadius: '9999px',
+      fontSize: '14px',
+      outline: 'none',
+    },
+    sendButton: {
+      width: '36px',
+      height: '36px',
+      borderRadius: '50%',
+      backgroundColor: '#9333ea',
+      border: 'none',
+      color: 'white',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: '8px',
+    },
+  };
+
   return (
-    <>
+    <div style={styles.container}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center z-50 hover:scale-110"
+        style={styles.button}
         aria-label="Open chat"
       >
-        {isOpen ? (
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {isOpen ? (
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        ) : (
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          ) : (
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-        )}
+          )}
+        </svg>
       </button>
 
       {isOpen && (
-        <div className="fixed bottom-24 right-6 w-80 h-[500px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden border border-gray-200">
-          <div className="bg-gradient-to-r from-purple-600 to-indigo-700 p-4 text-white">
-            <h3 className="font-semibold text-lg">Wine API Assistant</h3>
-            <p className="text-purple-100 text-sm">Powered by local LLM</p>
+        <div style={styles.chatWindow}>
+          <div style={styles.header}>
+            <div style={{ fontWeight: 600, fontSize: '16px' }}>Wine API Assistant</div>
+            <div style={{ fontSize: '12px', opacity: 0.9 }}>Powered by local LLM</div>
           </div>
 
           {apiKeyList.length > 0 && (
-            <div className="px-3 py-2 bg-gray-100 border-b">
+            <div style={{ padding: '8px 12px', backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
               <select
                 value={selectedKey}
                 onChange={(e) => setSelectedKey(e.target.value)}
-                className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                style={styles.select}
               >
                 {apiKeyList.map((key) => (
                   <option key={key.id} value={key.key}>
@@ -152,59 +253,40 @@ export default function Chatbot() {
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+          <div style={styles.messagesArea}>
             {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                    msg.role === 'user'
-                      ? 'bg-purple-600 text-white rounded-br-md'
-                      : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm'
-                  }`}
-                >
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                </div>
+              <div key={i} style={msg.role === 'user' ? styles.userMessage : styles.assistantMessage}>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
               </div>
             ))}
             {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-2">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                  </div>
+              <div style={styles.assistantMessage}>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite' }} />
+                  <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite', animationDelay: '0.1s' }} />
+                  <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite', animationDelay: '0.2s' }} />
                 </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {error && (
-            <div className="mx-4 mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-600 text-xs">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="p-3 border-t bg-white">
-            <div className="flex gap-2">
+          <form onSubmit={handleSubmit} style={styles.inputArea}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about wines..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                style={styles.input}
                 disabled={isLoading}
               />
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading}
-                className="w-10 h-10 bg-purple-600 text-white rounded-full flex items-center justify-center hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style={{ ...styles.sendButton, opacity: !input.trim() || isLoading ? 0.5 : 1 }}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               </button>
@@ -212,6 +294,6 @@ export default function Chatbot() {
           </form>
         </div>
       )}
-    </>
+    </div>
   );
 }
