@@ -3,7 +3,6 @@ from app.models import Wine, WinePreference, WinePriceHistory
 from typing import List, Optional
 import random
 
-
 MAX_PRICE = 100000.0
 MIN_RATING = 0.0
 MAX_RATING = 5.0
