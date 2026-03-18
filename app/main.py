@@ -447,6 +447,31 @@ def update_profile(
     return current_user
 
 
+class DeleteAccountRequest(BaseModel):
+    confirmation: str
+
+
+@app.delete("/users/me")
+def delete_account(
+    request: DeleteAccountRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if request.confirmation != "DELETE":
+        raise HTTPException(status_code=400, detail="Please type DELETE to confirm")
+
+    db.query(APIKey).filter(APIKey.user_id == current_user.id).delete()
+    db.query(UsageLog).filter(UsageLog.user_id == current_user.id).delete()
+    db.query(Webhook).filter(Webhook.user_id == current_user.id).delete()
+    db.query(TeamMember).filter(TeamMember.user_id == current_user.id).delete()
+    db.query(Team).filter(Team.owner_id == current_user.id).delete()
+
+    db.delete(current_user)
+    db.commit()
+
+    return {"message": "Account deleted successfully"}
+
+
 @app.post("/api-keys", response_model=APIKeyResponse)
 @limiter.limit("20/minute")
 async def create_api_key(

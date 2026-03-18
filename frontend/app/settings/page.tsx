@@ -27,6 +27,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -102,6 +105,28 @@ export default function SettingsPage() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     router.push('/');
+  };
+
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+
+    if (deleteConfirmation !== 'DELETE') {
+      setError('Please type DELETE to confirm');
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      await user.deleteAccount('DELETE');
+      localStorage.removeItem('token');
+      router.push('/');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to delete account');
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -208,11 +233,63 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        <div className="card">
+        <div className="card" style={{ marginBottom: '2rem' }}>
           <h2 style={{ marginBottom: '1rem' }}>Quick Links</h2>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             <Link href="/dashboard" className="btn btn-secondary">Back to Dashboard</Link>
           </div>
+        </div>
+
+        <div className="card" style={{ borderColor: '#dc3545', backgroundColor: '#fff5f5' }}>
+          <h2 style={{ marginBottom: '1rem', color: '#dc3545' }}>Danger Zone</h2>
+          <p style={{ marginBottom: '1rem', color: '#666' }}>
+            Permanently delete your account and all associated data. This action cannot be undone.
+          </p>
+          
+          {!showDeleteConfirm ? (
+            <button 
+              type="button" 
+              className="btn btn-danger"
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              Delete Account
+            </button>
+          ) : (
+            <form onSubmit={handleDeleteAccount}>
+              <p style={{ marginBottom: '1rem' }}>
+                This will permanently delete your account, API keys, usage history, and all other data.
+                Type <strong>DELETE</strong> to confirm:
+              </p>
+              <input
+                type="text"
+                className="input"
+                value={deleteConfirmation}
+                onChange={(e) => setDeleteConfirmation(e.target.value)}
+                placeholder="Type DELETE to confirm"
+                style={{ maxWidth: '300px', marginBottom: '1rem' }}
+              />
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button 
+                  type="submit" 
+                  className="btn btn-danger"
+                  disabled={deleting}
+                >
+                  {deleting ? 'Deleting...' : 'Confirm Delete'}
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmation('');
+                    setError('');
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>

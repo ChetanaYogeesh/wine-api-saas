@@ -91,6 +91,11 @@ export const user = {
     const response = await api.put('/users/me', data);
     return response.data;
   },
+  
+  deleteAccount: async (confirmation: string) => {
+    const response = await api.delete('/users/me', { data: { confirmation } });
+    return response.data;
+  },
 };
 
 export const subscription = {

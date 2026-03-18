@@ -125,6 +125,7 @@ export default function DashboardPage() {
               <Link href="/white-label" style={{ color: 'white', textDecoration: 'none' }}>White-label</Link>
               <Link href="/usage-alerts" style={{ color: 'white', textDecoration: 'none' }}>Alerts</Link>
               <Link href="/settings" style={{ color: 'white', textDecoration: 'none' }}>Settings</Link>
+              <Link href="/profile" style={{ color: 'white', textDecoration: 'none' }}>Profile</Link>
             </div>
           </div>
           <button onClick={logout} className="btn btn-secondary">Logout</button>
