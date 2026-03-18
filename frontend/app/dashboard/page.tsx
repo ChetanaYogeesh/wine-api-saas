@@ -118,7 +118,12 @@ export default function DashboardPage() {
             <Link href="/" className="navbar-brand">🍷 Wine API</Link>
             <div style={{ display: 'flex', gap: '1rem' }}>
               <Link href="/dashboard" style={{ color: 'white', textDecoration: 'none' }}>Dashboard</Link>
+              <Link href="/analytics" style={{ color: 'white', textDecoration: 'none' }}>Analytics</Link>
               <Link href="/subscription" style={{ color: 'white', textDecoration: 'none' }}>Subscription</Link>
+              <Link href="/webhooks" style={{ color: 'white', textDecoration: 'none' }}>Webhooks</Link>
+              <Link href="/teams" style={{ color: 'white', textDecoration: 'none' }}>Teams</Link>
+              <Link href="/white-label" style={{ color: 'white', textDecoration: 'none' }}>White-label</Link>
+              <Link href="/usage-alerts" style={{ color: 'white', textDecoration: 'none' }}>Alerts</Link>
               <Link href="/settings" style={{ color: 'white', textDecoration: 'none' }}>Settings</Link>
             </div>
           </div>

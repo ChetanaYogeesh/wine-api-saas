@@ -148,4 +148,139 @@ export const tiers = {
   },
 };
 
+export const webhooks = {
+  list: async () => {
+    const response = await api.get('/webhooks');
+    return response.data;
+  },
+  
+  create: async (data: { url: string; events: string }) => {
+    const response = await api.post('/webhooks', data);
+    return response.data;
+  },
+  
+  get: async (id: number) => {
+    const response = await api.get(`/webhooks/${id}`);
+    return response.data;
+  },
+  
+  update: async (id: number, data: { url?: string; events?: string; is_active?: boolean }) => {
+    const response = await api.put(`/webhooks/${id}`, data);
+    return response.data;
+  },
+  
+  delete: async (id: number) => {
+    const response = await api.delete(`/webhooks/${id}`);
+    return response.data;
+  },
+};
+
+export const teams = {
+  list: async () => {
+    const response = await api.get('/teams');
+    return response.data;
+  },
+  
+  create: async (name: string) => {
+    const response = await api.post('/teams', { name });
+    return response.data;
+  },
+  
+  get: async (id: number) => {
+    const response = await api.get(`/teams/${id}`);
+    return response.data;
+  },
+  
+  delete: async (id: number) => {
+    const response = await api.delete(`/teams/${id}`);
+    return response.data;
+  },
+  
+  addMember: async (teamId: number, email: string, role: string = 'member') => {
+    const response = await api.post(`/teams/${teamId}/members`, { email, role });
+    return response.data;
+  },
+  
+  removeMember: async (teamId: number, memberId: number) => {
+    const response = await api.delete(`/teams/${teamId}/members/${memberId}`);
+    return response.data;
+  },
+  
+  updateMember: async (teamId: number, memberId: number, role: string) => {
+    const response = await api.put(`/teams/${teamId}/members/${memberId}`, { role });
+    return response.data;
+  },
+};
+
+export const analytics = {
+  get: async (days: number = 30) => {
+    const response = await api.get(`/analytics?days=${days}`);
+    return response.data;
+  },
+  
+  export: async (format: 'json' | 'csv' = 'json') => {
+    const response = await api.get(`/analytics/export?format=${format}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+};
+
+export const usageAlerts = {
+  list: async () => {
+    const response = await api.get('/usage/alerts');
+    return response.data;
+  },
+  
+  create: async (data: { threshold_percent: number; email: string }) => {
+    const response = await api.post('/usage/alerts', data);
+    return response.data;
+  },
+  
+  delete: async (id: number) => {
+    const response = await api.delete(`/usage/alerts/${id}`);
+    return response.data;
+  },
+};
+
+export const whiteLabel = {
+  get: async () => {
+    const response = await api.get('/white-label');
+    return response.data;
+  },
+  
+  create: async (data: {
+    company_name?: string;
+    logo_url?: string;
+    primary_color?: string;
+    secondary_color?: string;
+    custom_domain?: string;
+    email_footer?: string;
+  }) => {
+    const response = await api.post('/white-label', data);
+    return response.data;
+  },
+  
+  update: async (data: {
+    company_name?: string;
+    logo_url?: string;
+    primary_color?: string;
+    secondary_color?: string;
+    email_footer?: string;
+  }) => {
+    const response = await api.put('/white-label', data);
+    return response.data;
+  },
+  
+  delete: async () => {
+    const response = await api.delete('/white-label');
+    return response.data;
+  },
+  
+  verifyDomain: async (domain: string) => {
+    const response = await api.get(`/white-label/verify-domain?domain=${domain}`);
+    return response.data;
+  },
+};
+
 export default api;
