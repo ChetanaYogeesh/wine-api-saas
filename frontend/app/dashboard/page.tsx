@@ -114,7 +114,14 @@ export default function DashboardPage() {
     <div className="dashboard">
       <div className="dashboard-header">
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Link href="/" className="navbar-brand">🍷 Wine API</Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+            <Link href="/" className="navbar-brand">🍷 Wine API</Link>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <Link href="/dashboard" style={{ color: 'white', textDecoration: 'none' }}>Dashboard</Link>
+              <Link href="/subscription" style={{ color: 'white', textDecoration: 'none' }}>Subscription</Link>
+              <Link href="/settings" style={{ color: 'white', textDecoration: 'none' }}>Settings</Link>
+            </div>
+          </div>
           <button onClick={logout} className="btn btn-secondary">Logout</button>
         </div>
       </div>

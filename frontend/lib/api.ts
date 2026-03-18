@@ -61,6 +61,65 @@ export const auth = {
     });
     return response.data;
   },
+
+  forgotPassword: async (email: string) => {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    const response = await api.post('/auth/reset-password', { token, new_password: newPassword });
+    return response.data;
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const response = await api.post('/auth/change-password', { 
+      current_password: currentPassword, 
+      new_password: newPassword 
+    });
+    return response.data;
+  },
+};
+
+export const user = {
+  getProfile: async () => {
+    const response = await api.get('/users/me');
+    return response.data;
+  },
+  
+  updateProfile: async (data: { full_name?: string; email?: string }) => {
+    const response = await api.put('/users/me', data);
+    return response.data;
+  },
+};
+
+export const subscription = {
+  get: async () => {
+    const response = await api.get('/subscription');
+    return response.data;
+  },
+  
+  createCheckout: async (priceId: string) => {
+    const response = await api.post('/subscription/checkout', { price_id: priceId });
+    return response.data;
+  },
+  
+  createPortal: async () => {
+    const response = await api.post('/subscription/portal');
+    return response.data;
+  },
+  
+  cancel: async () => {
+    const response = await api.post('/subscription/cancel');
+    return response.data;
+  },
+};
+
+export const invoices = {
+  list: async () => {
+    const response = await api.get('/invoices');
+    return response.data;
+  },
 };
 
 export const apiKeys = {

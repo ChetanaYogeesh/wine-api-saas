@@ -83,6 +83,12 @@ export default function LoginPage() {
           </button>
         </form>
         
+        <p style={{ textAlign: 'center', marginTop: '1rem' }}>
+          <Link href="/forgot-password" style={{ fontSize: '0.875rem' }}>
+            Forgot password?
+          </Link>
+        </p>
+        
         <p className="auth-footer">
           Don&apos;t have an account? <Link href="/register">Sign up</Link>
         </p>

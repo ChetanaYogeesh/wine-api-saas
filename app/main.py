@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, Query, HTTPException, Request, Depends
+from pydantic import BaseModel
 from fastapi.security import (
     APIKeyHeader,
     OAuth2PasswordBearer,
@@ -324,6 +325,126 @@ def login(
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@app.post("/auth/forgot-password")
+def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    from app.email import send_email
+
+    user = db.query(User).filter(User.email == request.email).first()
+
+    if not user:
+        return {"message": "If the email exists, a reset link has been sent"}
+
+    reset_token = create_access_token(
+        data={"sub": user.email, "type": "password_reset"},
+        expires_delta=timedelta(minutes=30),
+    )
+
+    reset_link = f"{settings.allowed_origins.split(',')[0].strip()}/reset-password?token={reset_token}"
+
+    send_email(
+        to=user.email,
+        subject="Reset your Wine API password",
+        body=f"Click the link to reset your password: {reset_link}\n\nThis link expires in 30 minutes.",
+    )
+
+    return {"message": "If the email exists, a reset link has been sent"}
+
+
+@app.post("/auth/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(
+            request.token, settings.secret_key, algorithms=[settings.algorithm]
+        )
+        if payload.get("type") != "password_reset":
+            raise HTTPException(status_code=400, detail="Invalid token")
+
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=400, detail="Invalid token")
+
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if len(request.new_password) < 6:
+            raise HTTPException(
+                status_code=400, detail="Password must be at least 6 characters"
+            )
+
+        user.hashed_password = hash_password(request.new_password)
+        db.commit()
+
+        return {"message": "Password reset successful"}
+
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+
+@app.post("/auth/change-password")
+def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(request.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    if len(request.new_password) < 6:
+        raise HTTPException(
+            status_code=400, detail="Password must be at least 6 characters"
+        )
+
+    current_user.hashed_password = hash_password(request.new_password)
+    db.commit()
+
+    return {"message": "Password changed successfully"}
+
+
+@app.get("/users/me", response_model=UserResponse)
+def get_current_user_info(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+
+
+@app.put("/users/me", response_model=UserResponse)
+def update_profile(
+    request: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if request.email and request.email != current_user.email:
+        existing = db.query(User).filter(User.email == request.email).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already in use")
+        current_user.email = request.email
+
+    if request.full_name is not None:
+        current_user.full_name = request.full_name
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 
 @app.post("/api-keys", response_model=APIKeyResponse)
