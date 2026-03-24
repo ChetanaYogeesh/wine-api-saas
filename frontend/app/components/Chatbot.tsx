@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { apiKeys } from '../../lib/api';
+import { apiKeys, usage } from '../../lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -12,6 +12,12 @@ interface APIKey {
   id: number;
   key: string;
   name: string;
+}
+
+interface UsageStats {
+  total_requests: number;
+  requests_today: number;
+  requests_this_month: number;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -87,14 +93,40 @@ export default function Chatbot() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage = input.trim();
+    const userMessage = input.trim().toLowerCase();
+    const isUsageQuestion = userMessage.includes('usage') || userMessage.includes('api usage') || userMessage.includes('how many');
+    
+    if (isUsageQuestion && isLoggedIn) {
+      setInput('');
+      setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const stats = await usage.getStats();
+        const response = `Your API Usage:
+- Total Requests: ${stats.total_requests.toLocaleString()}
+- Requests Today: ${stats.requests_today.toLocaleString()}
+- Requests This Month: ${stats.requests_this_month.toLocaleString()}
+
+You can view detailed analytics at /analytics`;
+        setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      } catch (err) {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I couldn\'t fetch your usage data. Please try again.' }]);
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    const userMessageOriginal = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setMessages(prev => [...prev, { role: 'user', content: userMessageOriginal }]);
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await callOllama(userMessage);
+      const response = await callOllama(userMessageOriginal);
       setMessages(prev => [...prev, { role: 'assistant', content: response }]);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
