@@ -37,6 +37,7 @@ services:
       - API_KEY=${API_KEY:-dev-api-key-change-me}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
       - SECRET_KEY=${SECRET_KEY:-change-this-to-a-random-secret-key}
+      - DOCKER=true
     depends_on:
       postgres:
         condition: service_healthy

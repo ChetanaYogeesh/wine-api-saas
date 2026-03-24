@@ -1,3 +1,4 @@
+import os
 import httpx
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -13,7 +14,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+if os.environ.get("DOCKER"):
+    OLLAMA_BASE_URL = "http://host.docker.internal:11434"
+
 DEFAULT_MODEL = "gemma3:4b"
 MAX_INPUT_LENGTH = 2000
 MAX_MESSAGES = 20
