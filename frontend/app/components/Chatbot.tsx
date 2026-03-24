@@ -65,7 +65,7 @@ export default function Chatbot() {
       { role: 'user' as const, content: userMessage }
     ];
 
-    const response = await fetch(`${API_BASE}/chat`, {
+    const response = await fetch(`${API_BASE}/chat/chat`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',

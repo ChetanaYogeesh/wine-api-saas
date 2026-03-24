@@ -6,6 +6,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import engine, Base, SessionLocal
 from app.models import Wine
+from app.payments import Subscription, PaymentMethod, Invoice, UsageAlert
+from app.models import (
+    User,
+    APIKey,
+    UsageLog,
+    Webhook,
+    WebhookDelivery,
+    Team,
+    TeamMember,
+    WhiteLabelConfig,
+)
 
 
 def init_db():
@@ -60,7 +71,23 @@ def import_wines(csv_path: str = "wine-ratings.csv"):
 def reset_db():
     """Drop all tables and recreate"""
     print("Dropping all tables...")
-    Base.metadata.drop_all(bind=engine)
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS webhook_deliveries CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS team_members CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS webhooks CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS api_keys CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS usage_logs CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS teams CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS white_label_configs CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS usage_alerts CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS invoices CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS payment_methods CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS subscriptions CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS wines CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS users CASCADE"))
+        conn.commit()
     print("Done! Tables dropped.")
     init_db()
 

@@ -14,14 +14,26 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL = "llama3.2"
+DEFAULT_MODEL = "gemma3:4b"
 MAX_INPUT_LENGTH = 2000
 MAX_MESSAGES = 20
 MAX_TOKENS = 500
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-ALLOWED_MODELS = {"llama3.2", "llama3.1", "llama3", "mistral", "codellama", "phi3"}
+ALLOWED_MODELS = {
+    "gemma3:4b",
+    "gemma3:latest",
+    "gemma3:1b",
+    "qwen3:8b",
+    "qwen2.5-coder:3b",
+    "qwen2.5-coder:7b",
+    "llama3.2",
+    "llama3.1",
+    "mistral",
+    "codellama",
+    "phi3",
+}
 
 
 class ChatMessage(BaseModel):
